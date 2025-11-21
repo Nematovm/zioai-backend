@@ -1,5 +1,12 @@
 // ZIYOAI SERVER
 
+const cors = require('cors');
+
+app.use(cors({
+  origin: 'https://zioai-frontend.onrender.com', // Frontend URL
+  credentials: true
+}));
+
 // 1. Barcha kerakli modullarni yuklaymiz
 require("dotenv").config();
 const express = require("express");
