@@ -5,7 +5,7 @@ require("dotenv").config();
 const express = require("express");
 const Anthropic = require("@anthropic-ai/sdk");
 const path = require("path");
-const cors = require("cors"); // ✅ Faqat bir marta!
+const cors = require("cors");
 
 // 2. Express app yaratamiz
 const app = express();
@@ -17,32 +17,24 @@ const anthropic = new Anthropic({
 });
 
 // 4. Middleware-larni sozlaymiz
+// ✅ CORS TO'G'RILANDI - "ziyoai" to'g'ri yozildi
 app.use(cors({
-  origin: 'https://zioai-frontend.onrender.com', // ✅ Frontend URL
+  origin: [
+    'https://zioai-frontend.onrender.com',
+    'http://localhost:3000',
+    'http://127.0.0.1:5500'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
+
+// ✅ Preflight so'rovlar uchun
+app.options('*', cors());
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(__dirname));
-
-// ... qolgan kod o'zgarmaydi
-
-// 5. Asosiy sahifa route
-// app.get("/", (req, res) => {
-//   const indexPath = path.join(__dirname, "/index.html");
-//   console.log("📄 Index.html yo'li:", indexPath);
-
-//   if (require("fs").existsSync(indexPath)) {
-//     res.sendFile(indexPath);
-//   } else {
-//     console.error("❌ index.html topilmadi:", indexPath);
-//     res.status(404).send(`
-//       <h1>❌ index.html topilmadi</h1>
-//       <p>Fayl yo'li: ${indexPath}</p>
-//       <p>Iltimos, fayl to'g'ri joyda ekanligini tekshiring.</p>
-//     `);
-//   }
-// });
 
 // ============================================
 // HELPER FUNCTION - TEXT FORMATTING
@@ -51,7 +43,6 @@ function formatAIResponse(text) {
   let html = text;
   let sectionOpen = false;
 
-  // Sarlavhalar
   html = html.replace(/\*\*(\d+)\.\s*([^*]+)\*\*/g, (match, number, title) => {
     const icons = {
       '1': '🔍', '2': '✅', '3': '📐', '4': '📝',
@@ -219,7 +210,7 @@ ${selectedPrompt.sections}`;
     }
 
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-1",
+      model: "claude-sonnet-4-20250514",
       max_tokens: 4096,
       messages: [
         {
@@ -247,7 +238,7 @@ ${selectedPrompt.sections}`;
 });
 
 // ============================================
-// GRAMMAR CHECKER - YANGILANGAN
+// GRAMMAR CHECKER
 // ============================================
 app.post("/api/check-grammar", async (req, res) => {
   try {
@@ -326,7 +317,7 @@ Tips to avoid errors.
     };
 
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-1",
+      model: "claude-sonnet-4-20250514",
       max_tokens: 3096,
       messages: [
         {
@@ -354,7 +345,7 @@ Tips to avoid errors.
 });
 
 // ============================================
-// VOCABULARY BUILDER - AUDIO BILAN ✅
+// VOCABULARY BUILDER
 // ============================================
 app.post("/api/vocabulary", async (req, res) => {
   try {
@@ -370,7 +361,7 @@ app.post("/api/vocabulary", async (req, res) => {
     }
 
     const prompts = {
-  uz: `Sen lug'at mutaxassisisisan. Quyidagi so'z haqida to'liq ma'lumot ber:
+      uz: `Sen lug'at mutaxassisisisan. Quyidagi so'z haqida to'liq ma'lumot ber:
 
 SO'Z: ${word}
 
@@ -380,11 +371,7 @@ JAVOBDA QUYIDAGILARNI YOZ:
 So'zning asosiy ma'nosi.
 
 **2. TALAFFUZ:**
-- IPA (agar mavjud bo'lsa): faqat ko'rsatish uchun.
-- AUDIO UCHUN TALAFFUZ (IPA ishlatma!): so'zni oddiy o'qilishi bo‘yicha, oson o‘qiladigan formatda yoz.  
-  Masalan: "beautiful" → "byoo-tih-fuhl"  
-  "qahva" → "qah-va"  
-  "oila" → "oy-la"
+So'zni oddiy o'qilishi bo'yicha yoz.
 
 **3. SO'Z TURKUMI:**
 Noun, verb, adjective va h.k.
@@ -401,10 +388,9 @@ Qarama-qarshi ma'noli so'zlar.
 **7. ESLAB QOLISH UCHUN TIP:**
 So'zni eslab qolish uchun qulay usul.
 
-⚠️ Javobni faqat o'zbek tilida yoz.
-📚 ✨ 💡 📖 🔊`,
+⚠️ Javobni faqat o'zbek tilida yoz.`,
 
-  ru: `Ты эксперт по словарю. Предоставь полную информацию о следующем слове:
+      ru: `Ты эксперт по словарю. Предоставь полную информацию о следующем слове:
 
 СЛОВО: ${word}
 
@@ -414,10 +400,7 @@ So'zni eslab qolish uchun qulay usul.
 Основное значение слова.
 
 **2. ПРОИЗНОШЕНИЕ:**
-- IPA (если есть): только для справки.
-- ПРОИЗНОШЕНИЕ ДЛЯ АУДИО (без IPA!): напиши слово так, как оно произносится, простыми русскими звуками.  
-  Например: "computer" → "компьютер"  
-  "restaurant" → "рэстэрант"
+Напиши слово так, как оно произносится.
 
 **3. ЧАСТЬ РЕЧИ:**
 Noun, verb, adjective и т.д.
@@ -434,10 +417,9 @@ Noun, verb, adjective и т.д.
 **7. СОВЕТ ДЛЯ ЗАПОМИНАНИЯ:**
 Удобный способ запомнить слово.
 
-⚠️ Отвечай только на русском языке.
-📚 ✨ 💡 📖 🔊`,
+⚠️ Отвечай только на русском языке.`,
 
-  en: `You are a dictionary expert. Provide complete information about the following word:
+      en: `You are a dictionary expert. Provide complete information about the following word:
 
 WORD: ${word}
 
@@ -447,10 +429,7 @@ IN YOUR ANSWER INCLUDE:
 Main definition of the word.
 
 **2. PRONUNCIATION:**
-- IPA (if available): for reference only.
-- PRONUNCIATION FOR AUDIO (NO IPA!): write the pronunciation in a simple, readable form.  
-  Example: "beautiful" → "byoo-tih-fuhl"  
-  "restaurant" → "res-tuh-ront"
+Write the pronunciation in a simple, readable form.
 
 **3. PART OF SPEECH:**
 Noun, verb, adjective, etc.
@@ -467,15 +446,13 @@ Words with opposite meanings.
 **7. MEMORY TIP:**
 Easy way to remember the word.
 
-⚠️ Answer ONLY in English.
-📚 ✨ 💡 📖 🔊`
-};
-
+⚠️ Answer ONLY in English.`
+    };
 
     const selectedPrompt = prompts[language] || prompts['uz'];
 
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-1",
+      model: "claude-sonnet-4-20250514",
       max_tokens: 2048,
       messages: [
         {
@@ -491,7 +468,7 @@ Easy way to remember the word.
     res.json({
       success: true,
       result: formattedResponse,
-      word: word // ✅ So'zni qaytaramiz - audio uchun kerak
+      word: word
     });
 
   } catch (error) {
@@ -504,7 +481,7 @@ Easy way to remember the word.
 });
 
 // ============================================
-// 4. MOTIVATION QUOTES API
+// MOTIVATION QUOTES API
 // ============================================
 app.get("/api/motivation", async (req, res) => {
   try {
@@ -543,7 +520,7 @@ app.get("/api/motivation", async (req, res) => {
 });
 
 // ============================================
-// 5. QUIZ GENERATOR API ✅ YANGI
+// QUIZ GENERATOR API
 // ============================================
 app.post("/api/generate-quiz", async (req, res) => {
   try {
@@ -556,7 +533,6 @@ app.post("/api/generate-quiz", async (req, res) => {
       language 
     });
 
-    // Validatsiya
     if (!article || article.trim() === "") {
       return res.status(400).json({
         error: "Matn yuborilmadi",
@@ -571,7 +547,6 @@ app.post("/api/generate-quiz", async (req, res) => {
       });
     }
 
-    // Qiyinchilik nomlari
     const difficultyNames = {
       uz: { easy: "oson", medium: "o'rtacha", hard: "qiyin" },
       ru: { easy: "легкий", medium: "средний", hard: "сложный" },
@@ -660,9 +635,8 @@ EXAMPLE:
 
     const selectedPrompt = prompts[language] || prompts['uz'];
     
-    // Claude API ga so'rov
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-1",
+      model: "claude-sonnet-4-20250514",
       max_tokens: 4096,
       temperature: 0.7,
       messages: [
@@ -683,7 +657,6 @@ ${selectedPrompt.example}
     let rawResponse = message.content[0].text;
     console.log("🔍 Claude javobi:", rawResponse.substring(0, 200) + "...");
 
-    // JSON ni tozalash
     rawResponse = rawResponse
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
@@ -691,15 +664,11 @@ ${selectedPrompt.example}
       .replace(/[^}]*$/, '')
       .trim();
 
-    console.log("🧹 Tozalangan javob:", rawResponse.substring(0, 200) + "...");
-
-    // JSON parse
     let quizData;
     try {
       quizData = JSON.parse(rawResponse);
     } catch (parseError) {
       console.error("❌ JSON parse xatosi:", parseError);
-      console.error("📄 Javob:", rawResponse);
       
       return res.status(500).json({
         error: "Quiz yaratishda xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.",
@@ -708,7 +677,6 @@ ${selectedPrompt.example}
       });
     }
 
-    // Validatsiya
     if (!quizData.questions || !Array.isArray(quizData.questions)) {
       return res.status(500).json({
         error: "Quiz formati noto'g'ri",
@@ -716,7 +684,6 @@ ${selectedPrompt.example}
       });
     }
 
-    // Har bir savolni tekshirish
     const validQuestions = quizData.questions.filter(q => 
       q.question && 
       Array.isArray(q.options) && 
@@ -752,7 +719,7 @@ ${selectedPrompt.example}
 });
 
 // ============================================
-// 6. QUIZ STATISTICS API
+// QUIZ STATISTICS API
 // ============================================
 app.post("/api/quiz-stats", async (req, res) => {
   try {
@@ -794,7 +761,7 @@ app.post("/api/quiz-stats", async (req, res) => {
 });
 
 // ============================================
-// 7. TEST ENDPOINT
+// TEST ENDPOINT
 // ============================================
 app.get("/api/test", (req, res) => {
   res.json({
@@ -807,14 +774,14 @@ app.get("/api/test", (req, res) => {
       "POST /api/check-grammar",
       "POST /api/vocabulary",
       "GET  /api/motivation",
-      "POST /api/generate-quiz ✨ YANGI",
+      "POST /api/generate-quiz",
       "POST /api/quiz-stats"
     ]
   });
 });
 
 // ============================================
-// 8. 404 HANDLER
+// 404 HANDLER
 // ============================================
 app.use((req, res) => {
   res.status(404).json({
@@ -824,7 +791,7 @@ app.use((req, res) => {
 });
 
 // ============================================
-// 9. SERVERNI ISHGA TUSHIRISH
+// SERVERNI ISHGA TUSHIRISH
 // ============================================
 app.listen(PORT, () => {
   console.log("\n🚀 ===================================");
@@ -833,12 +800,12 @@ app.listen(PORT, () => {
   console.log(`📍 URL: http://localhost:${PORT}`);
   console.log(`🔑 API Key: ${process.env.ANTHROPIC_API_KEY ? "✅ Mavjud" : "❌ Yo'q"}`);
   console.log(`⏰ Vaqt: ${new Date().toLocaleString("uz-UZ")}`);
-  console.log(`📊 Endpoints: 7 ta (Quiz API qo'shildi ✨)`);
+  console.log(`📊 Endpoints: 7 ta`);
   console.log("=====================================\n");
 });
 
 // ============================================
-// 10. GRACEFUL SHUTDOWN
+// GRACEFUL SHUTDOWN
 // ============================================
 process.on("SIGTERM", () => {
   console.log("👋 Server to'xtatilmoqda...");
