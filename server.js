@@ -210,7 +210,7 @@ ${selectedPrompt.sections}`;
     }
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-1",
       max_tokens: 4096,
       messages: [
         {
@@ -317,7 +317,7 @@ Tips to avoid errors.
     };
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-1",
       max_tokens: 3096,
       messages: [
         {
@@ -452,7 +452,7 @@ Easy way to remember the word.
     const selectedPrompt = prompts[language] || prompts['uz'];
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-1",
       max_tokens: 2048,
       messages: [
         {
@@ -636,7 +636,7 @@ EXAMPLE:
     const selectedPrompt = prompts[language] || prompts['uz'];
     
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-1",
       max_tokens: 4096,
       temperature: 0.7,
       messages: [
