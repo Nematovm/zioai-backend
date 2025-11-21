@@ -1,18 +1,11 @@
 // ZIYOAI SERVER
 
-const cors = require('cors');
-
-app.use(cors({
-  origin: 'https://zioai-frontend.onrender.com', // Frontend URL
-  credentials: true
-}));
-
-// 1. Barcha kerakli modullarni yuklaymiz
+// 1. Barcha kerakli modullarni yuklaymiz (BIRINCHI!)
 require("dotenv").config();
 const express = require("express");
 const Anthropic = require("@anthropic-ai/sdk");
 const path = require("path");
-const cors = require("cors");
+const cors = require("cors"); // ✅ Faqat bir marta!
 
 // 2. Express app yaratamiz
 const app = express();
@@ -24,10 +17,15 @@ const anthropic = new Anthropic({
 });
 
 // 4. Middleware-larni sozlaymiz
-app.use(cors());
+app.use(cors({
+  origin: 'https://zioai-frontend.onrender.com', // ✅ Frontend URL
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(__dirname));
+
+// ... qolgan kod o'zgarmaydi
 
 // 5. Asosiy sahifa route
 // app.get("/", (req, res) => {
