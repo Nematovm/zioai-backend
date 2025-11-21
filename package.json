@@ -1,0 +1,27 @@
+{
+  "name": "ziyoai-backend",
+  "version": "1.0.0",
+  "description": "ZiyoAI Education Platform Backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "ai",
+    "education",
+    "nodejs",
+    "express"
+  ],
+  "author": "ZiyoAI Team",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
