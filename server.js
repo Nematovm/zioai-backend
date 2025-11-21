@@ -1,62 +1,66 @@
 // ZIYOAI SERVER
 
-// 1. Barcha kerakli modullarni yuklaymiz (BIRINCHI!)
+// Common Modules
 require("dotenv").config();
 const express = require("express");
 const Anthropic = require("@anthropic-ai/sdk");
 const path = require("path");
 const cors = require("cors");
 
-// 2. Express app yaratamiz
+// Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 3. Anthropic SDK-ni sozlaymiz
+// Anthropic SDK
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-// 4. Middleware-larni sozlaymiz
-// ✅ CORS TO'G'RILANDI - "ziyoai" to'g'ri yozildi
-app.use(cors({
-  origin: [
-    'https://zioai-frontend.onrender.com',
-    'http://localhost:3000',
-    'http://127.0.0.1:5500'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
+// Middleware
+app.use(
+  cors({
+    origin: [
+      "https://zioai-frontend.onrender.com",
+      "http://localhost:3000",
+      "http://127.0.0.1:5500",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
 
-// ✅ Preflight so'rovlar uchun
-app.options('*', cors());
+// Preflight
+app.options("*", cors());
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(express.static(__dirname));
 
-// ============================================
 // HELPER FUNCTION - TEXT FORMATTING
-// ============================================
 function formatAIResponse(text) {
   let html = text;
   let sectionOpen = false;
 
   html = html.replace(/\*\*(\d+)\.\s*([^*]+)\*\*/g, (match, number, title) => {
     const icons = {
-      '1': '🔍', '2': '✅', '3': '📐', '4': '📝',
-      '5': '💡', '6': '📖', '7': '🚀'
+      1: "🔍",
+      2: "✅",
+      3: "📐",
+      4: "📝",
+      5: "💡",
+      6: "📖",
+      7: "🚀",
     };
 
-    let close = sectionOpen ? '</div></div>' : '';
+    let close = sectionOpen ? "</div></div>" : "";
     sectionOpen = true;
 
     return (
       close +
       `<div class="ai-section">
          <div class="ai-heading">
-           <span class="ai-icon">${icons[number] || '📌'}</span>
+           <span class="ai-icon">${icons[number] || "📌"}</span>
            <span class="ai-number">${number}</span>
            <span class="ai-title">${title.trim()}</span>
          </div>
@@ -64,28 +68,32 @@ function formatAIResponse(text) {
     );
   });
 
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="ai-bold">$1</strong>');
+  html = html.replace(
+    /\*\*([^*]+)\*\*/g,
+    '<strong class="ai-bold">$1</strong>'
+  );
   html = html.replace(/^[-•]\s+(.+)$/gm, '<div class="ai-bullet">$1</div>');
   html = html.replace(/`([^`]+)`/g, '<code class="ai-code">$1</code>');
-  html = html.replace(/(\d+\s*[\+\-\*\/]\s*\d+\s*=\s*\d+)/g, '<span class="ai-formula">$1</span>');
-  html = html.replace(/\n\n+/g, '<br><br>');
-  html = html.replace(/\n/g, '<br>');
-  html = html.replace(/^[#>\s]+/gm, '');
-  html = html.replace(/##/g, '');
-  html = html.replace(/#+\s*$/gm, '');
-  html = html.replace(/---|```|`/g, '');
+  html = html.replace(
+    /(\d+\s*[\+\-\*\/]\s*\d+\s*=\s*\d+)/g,
+    '<span class="ai-formula">$1</span>'
+  );
+  html = html.replace(/\n\n+/g, "<br><br>");
+  html = html.replace(/\n/g, "<br>");
+  html = html.replace(/^[#>\s]+/gm, "");
+  html = html.replace(/##/g, "");
+  html = html.replace(/#+\s*$/gm, "");
+  html = html.replace(/---|```|`/g, "");
 
-  if (sectionOpen) html += '</div></div>';
+  if (sectionOpen) html += "</div></div>";
 
   return html;
 }
 
-// ============================================
 // 1. HOMEWORK FIXER API
-// ============================================
 app.post("/api/fix-homework", async (req, res) => {
   try {
-    const { homework, image, type, language = 'uz' } = req.body;
+    const { homework, image, type, language = "uz" } = req.body;
 
     const prompts = {
       uz: {
@@ -114,7 +122,7 @@ Yana bir misol ber.
 **7. MASLAHAT:**
 Ko'nikma rivojlantirish uchun maslahat.
 
-⚠️ JAVOBNI FAQAT O'ZBEK TILIDA YOZ! 🇺🇿`
+⚠️ JAVOBNI FAQAT O'ZBEK TILIDA YOZ! 🇺🇿`,
       },
       ru: {
         instruction: `Ты профессиональный преподаватель и эксперт по математике.`,
@@ -142,7 +150,7 @@ Ko'nikma rivojlantirish uchun maslahat.
 **7. СОВЕТ:**
 Как развить навык.
 
-⚠️ ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! 🇷🇺`
+⚠️ ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! 🇷🇺`,
       },
       en: {
         instruction: `You are a professional teacher and math expert.`,
@@ -170,17 +178,17 @@ Another example.
 **7. TIP:**
 Advice for skill development.
 
-⚠️ ANSWER ONLY IN ENGLISH! 🇬🇧`
-      }
+⚠️ ANSWER ONLY IN ENGLISH! 🇬🇧`,
+      },
     };
 
-    const selectedPrompt = prompts[language] || prompts['uz'];
+    const selectedPrompt = prompts[language] || prompts["uz"];
 
     let messageContent;
 
-    if (type === 'image') {
-      const base64Data = image.split(',')[1];
-      const mediaType = image.split(';')[0].split(':')[1];
+    if (type === "image") {
+      const base64Data = image.split(",")[1];
+      const mediaType = image.split(";")[0].split(":")[1];
 
       messageContent = [
         {
@@ -227,7 +235,6 @@ ${selectedPrompt.sections}`;
       success: true,
       correctedHomework: formattedResponse,
     });
-
   } catch (error) {
     console.error("❌ Homework API xatosi:", error);
     res.status(500).json({
@@ -237,12 +244,10 @@ ${selectedPrompt.sections}`;
   }
 });
 
-// ============================================
 // GRAMMAR CHECKER
-// ============================================
 app.post("/api/check-grammar", async (req, res) => {
   try {
-    const { text, language = 'uz' } = req.body;
+    const { text, language = "uz" } = req.body;
 
     if (!text || text.trim() === "") {
       return res.status(400).json({
@@ -272,7 +277,7 @@ Har bir xatoni nima uchun tuzatganingni tushuntir.
 Kelajakda xatolardan qochish uchun maslahat ber.
 
 ⚠️ JAVOBNI FAQAT O'ZBEK TILIDA BER! 🇺🇿`,
-      
+
       ru: `Ты профессиональный эксперт по грамматике.
 
 ТЕКСТ:
@@ -293,7 +298,7 @@ ${text}
 Советы, как избегать ошибок.
 
 ⚠️ ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! 🇷🇺`,
-      
+
       en: `You are a professional grammar expert.
 
 TEXT:
@@ -313,7 +318,7 @@ Explain why you corrected each error.
 **4. TIPS:**
 Tips to avoid errors.
 
-⚠️ ANSWER ONLY IN ENGLISH! 🇬🇧`
+⚠️ ANSWER ONLY IN ENGLISH! 🇬🇧`,
     };
 
     const message = await anthropic.messages.create({
@@ -322,7 +327,7 @@ Tips to avoid errors.
       messages: [
         {
           role: "user",
-          content: prompts[language] || prompts['uz'],
+          content: prompts[language] || prompts["uz"],
         },
       ],
     });
@@ -334,7 +339,6 @@ Tips to avoid errors.
       success: true,
       result: formattedResponse,
     });
-
   } catch (error) {
     console.error("❌ Grammar API xatosi:", error);
     res.status(500).json({
@@ -344,12 +348,10 @@ Tips to avoid errors.
   }
 });
 
-// ============================================
 // VOCABULARY BUILDER
-// ============================================
 app.post("/api/vocabulary", async (req, res) => {
   try {
-    const { word, language = 'uz' } = req.body;
+    const { word, language = "uz" } = req.body;
 
     console.log("📚 Vocabulary so'rov:", { word, language });
 
@@ -446,10 +448,10 @@ Words with opposite meanings.
 **7. MEMORY TIP:**
 Easy way to remember the word.
 
-⚠️ Answer ONLY in English.`
+⚠️ Answer ONLY in English.`,
     };
 
-    const selectedPrompt = prompts[language] || prompts['uz'];
+    const selectedPrompt = prompts[language] || prompts["uz"];
 
     const message = await anthropic.messages.create({
       model: "claude-opus-4-1",
@@ -468,9 +470,8 @@ Easy way to remember the word.
     res.json({
       success: true,
       result: formattedResponse,
-      word: word
+      word: word,
     });
-
   } catch (error) {
     console.error("❌ Vocabulary API xatosi:", error);
     res.status(500).json({
@@ -480,9 +481,7 @@ Easy way to remember the word.
   }
 });
 
-// ============================================
 // MOTIVATION QUOTES API
-// ============================================
 app.get("/api/motivation", async (req, res) => {
   try {
     const motivationalQuotes = [
@@ -500,16 +499,16 @@ app.get("/api/motivation", async (req, res) => {
       "🌟 Your future depends on what you do today!",
       "💫 Small progress is still progress!",
       "🎨 Creativity takes courage! Keep creating.",
-      "🏆 Success starts with self-discipline!"
+      "🏆 Success starts with self-discipline!",
     ];
 
-    const randomQuote = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
+    const randomQuote =
+      motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
 
     res.json({
       success: true,
       quote: randomQuote,
     });
-
   } catch (error) {
     console.error("❌ Motivation API xatosi:", error);
     res.status(500).json({
@@ -519,18 +518,16 @@ app.get("/api/motivation", async (req, res) => {
   }
 });
 
-// ============================================
 // QUIZ GENERATOR API
-// ============================================
 app.post("/api/generate-quiz", async (req, res) => {
   try {
-    const { article, questionCount, difficulty, language = 'uz' } = req.body;
+    const { article, questionCount, difficulty, language = "uz" } = req.body;
 
-    console.log("📝 Quiz so'rov:", { 
-      articleLength: article?.length, 
-      questionCount, 
-      difficulty, 
-      language 
+    console.log("📝 Quiz so'rov:", {
+      articleLength: article?.length,
+      questionCount,
+      difficulty,
+      language,
     });
 
     if (!article || article.trim() === "") {
@@ -550,12 +547,14 @@ app.post("/api/generate-quiz", async (req, res) => {
     const difficultyNames = {
       uz: { easy: "oson", medium: "o'rtacha", hard: "qiyin" },
       ru: { easy: "легкий", medium: "средний", hard: "сложный" },
-      en: { easy: "easy", medium: "medium", hard: "hard" }
+      en: { easy: "easy", medium: "medium", hard: "hard" },
     };
 
     const prompts = {
       uz: {
-        instruction: `Sen professional test tuzuvchisissan. Quyidagi matndan ${questionCount} ta ${difficultyNames.uz[difficulty] || "o'rtacha"} darajali test savollarini yarating.
+        instruction: `Sen professional test tuzuvchisissan. Quyidagi matndan ${questionCount} ta ${
+          difficultyNames.uz[difficulty] || "o'rtacha"
+        } darajali test savollarini yarating.
 
 📋 QOIDALAR:
 - Har bir savol 4 ta variant bilan
@@ -565,7 +564,7 @@ app.post("/api/generate-quiz", async (req, res) => {
 - Variantlar qisqa va aniq bo'lsin
 
 ⚠️ JAVOBNI FAQAT JSON FORMATDA BERING, BOSHQA HECH NARSA YOZMANG!`,
-        
+
         example: `
 MISOL:
 {
@@ -577,11 +576,13 @@ MISOL:
       "explanation": "Bu to'g'ri javob, chunki..."
     }
   ]
-}`
+}`,
       },
-      
+
       ru: {
-        instruction: `Ты профессиональный составитель тестов. Создай ${questionCount} тестовых вопросов уровня ${difficultyNames.ru[difficulty] || "средний"} из следующего текста.
+        instruction: `Ты профессиональный составитель тестов. Создай ${questionCount} тестовых вопросов уровня ${
+          difficultyNames.ru[difficulty] || "средний"
+        } из следующего текста.
 
 📋 ПРАВИЛА:
 - Каждый вопрос с 4 вариантами
@@ -591,7 +592,7 @@ MISOL:
 - Варианты должны быть краткими и точными
 
 ⚠️ ОТВЕЧАЙ ТОЛЬКО В ФОРМАТЕ JSON, НИЧЕГО БОЛЬШЕ НЕ ПИШИ!`,
-        
+
         example: `
 ПРИМЕР:
 {
@@ -603,11 +604,13 @@ MISOL:
       "explanation": "Это правильный ответ, потому что..."
     }
   ]
-}`
+}`,
       },
-      
+
       en: {
-        instruction: `You are a professional test creator. Create ${questionCount} ${difficulty || "medium"} level test questions from the following text.
+        instruction: `You are a professional test creator. Create ${questionCount} ${
+          difficulty || "medium"
+        } level test questions from the following text.
 
 📋 RULES:
 - Each question with 4 options
@@ -617,7 +620,7 @@ MISOL:
 - Options should be concise and accurate
 
 ⚠️ RESPOND ONLY IN JSON FORMAT, WRITE NOTHING ELSE!`,
-        
+
         example: `
 EXAMPLE:
 {
@@ -629,12 +632,12 @@ EXAMPLE:
       "explanation": "This is correct because..."
     }
   ]
-}`
-      }
+}`,
+      },
     };
 
-    const selectedPrompt = prompts[language] || prompts['uz'];
-    
+    const selectedPrompt = prompts[language] || prompts["uz"];
+
     const message = await anthropic.messages.create({
       model: "claude-opus-4-1",
       max_tokens: 4096,
@@ -649,7 +652,7 @@ ${article}
 
 ${selectedPrompt.example}
 
-⚠️ ESLATMA: Faqat JSON format! Markdown yoki boshqa formatlar kerak emas!`
+⚠️ ESLATMA: Faqat JSON format! Markdown yoki boshqa formatlar kerak emas!`,
         },
       ],
     });
@@ -658,10 +661,10 @@ ${selectedPrompt.example}
     console.log("🔍 Claude javobi:", rawResponse.substring(0, 200) + "...");
 
     rawResponse = rawResponse
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .replace(/^[^{]*/, '')
-      .replace(/[^}]*$/, '')
+      .replace(/```json\n?/g, "")
+      .replace(/```\n?/g, "")
+      .replace(/^[^{]*/, "")
+      .replace(/[^}]*$/, "")
       .trim();
 
     let quizData;
@@ -669,11 +672,12 @@ ${selectedPrompt.example}
       quizData = JSON.parse(rawResponse);
     } catch (parseError) {
       console.error("❌ JSON parse xatosi:", parseError);
-      
+
       return res.status(500).json({
-        error: "Quiz yaratishda xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.",
+        error:
+          "Quiz yaratishda xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.",
         success: false,
-        details: parseError.message
+        details: parseError.message,
       });
     }
 
@@ -684,14 +688,15 @@ ${selectedPrompt.example}
       });
     }
 
-    const validQuestions = quizData.questions.filter(q => 
-      q.question && 
-      Array.isArray(q.options) && 
-      q.options.length === 4 &&
-      typeof q.correctAnswer === 'number' &&
-      q.correctAnswer >= 0 && 
-      q.correctAnswer < 4 &&
-      q.explanation
+    const validQuestions = quizData.questions.filter(
+      (q) =>
+        q.question &&
+        Array.isArray(q.options) &&
+        q.options.length === 4 &&
+        typeof q.correctAnswer === "number" &&
+        q.correctAnswer >= 0 &&
+        q.correctAnswer < 4 &&
+        q.explanation
     );
 
     if (validQuestions.length === 0) {
@@ -706,9 +711,8 @@ ${selectedPrompt.example}
     res.json({
       success: true,
       questions: validQuestions,
-      totalQuestions: validQuestions.length
+      totalQuestions: validQuestions.length,
     });
-
   } catch (error) {
     console.error("❌ Quiz API xatosi:", error);
     res.status(500).json({
@@ -718,18 +722,16 @@ ${selectedPrompt.example}
   }
 });
 
-// ============================================
 // QUIZ STATISTICS API
-// ============================================
 app.post("/api/quiz-stats", async (req, res) => {
   try {
     const { score, totalQuestions, timeSpent, difficulty } = req.body;
-    
+
     const percentage = ((score / totalQuestions) * 100).toFixed(0);
-    
+
     let message = "";
     let emoji = "";
-    
+
     if (percentage >= 90) {
       message = "Ajoyib! Siz a'lo natija ko'rsatdingiz! 🎉";
       emoji = "🏆";
@@ -743,14 +745,13 @@ app.post("/api/quiz-stats", async (req, res) => {
       message = "Mashq qilishda davom eting! 🎯";
       emoji = "💡";
     }
-    
+
     res.json({
       success: true,
       message,
       emoji,
-      percentage: parseInt(percentage)
+      percentage: parseInt(percentage),
     });
-    
   } catch (error) {
     console.error("❌ Quiz stats xatosi:", error);
     res.status(500).json({
@@ -760,9 +761,7 @@ app.post("/api/quiz-stats", async (req, res) => {
   }
 });
 
-// ============================================
 // TEST ENDPOINT
-// ============================================
 app.get("/api/test", (req, res) => {
   res.json({
     status: "OK",
@@ -775,14 +774,12 @@ app.get("/api/test", (req, res) => {
       "POST /api/vocabulary",
       "GET  /api/motivation",
       "POST /api/generate-quiz",
-      "POST /api/quiz-stats"
-    ]
+      "POST /api/quiz-stats",
+    ],
   });
 });
 
-// ============================================
 // 404 HANDLER
-// ============================================
 app.use((req, res) => {
   res.status(404).json({
     error: "Sahifa topilmadi",
@@ -790,23 +787,18 @@ app.use((req, res) => {
   });
 });
 
-// ============================================
 // SERVERNI ISHGA TUSHIRISH
-// ============================================
 app.listen(PORT, () => {
-  console.log("\n🚀 ===================================");
-  console.log(`   ZiyoAI Server ishga tushdi!`);
-  console.log("=====================================");
+  console.log(`🚀 ZiyoAI Server has been started!`);
   console.log(`📍 URL: http://localhost:${PORT}`);
-  console.log(`🔑 API Key: ${process.env.ANTHROPIC_API_KEY ? "✅ Mavjud" : "❌ Yo'q"}`);
-  console.log(`⏰ Vaqt: ${new Date().toLocaleString("uz-UZ")}`);
+  console.log(
+    `🔑 API Key: ${process.env.ANTHROPIC_API_KEY ? "✅ Added" : "❌ No"}`
+  );
+  console.log(`⏰ Time: ${new Date().toLocaleString("uz-UZ")}`);
   console.log(`📊 Endpoints: 7 ta`);
-  console.log("=====================================\n");
 });
 
-// ============================================
 // GRACEFUL SHUTDOWN
-// ============================================
 process.on("SIGTERM", () => {
   console.log("👋 Server to'xtatilmoqda...");
   process.exit(0);
