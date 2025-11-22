@@ -4,6 +4,8 @@ require('dotenv').config();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Common Modules
+// DEEPGRAM SDK
+const { createClient } = require("@deepgram/sdk");
 const express = require("express");
 const path = require("path");
 const cors = require("cors");
@@ -1108,6 +1110,69 @@ process.on("SIGINT", () => process.exit(0));
 // ============================================
 // AUDIO TO TEXT API (Gemini Speech-to-Text)
 // ============================================
+// app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ 
+//         error: "Audio file yuborilmadi", 
+//         success: false 
+//       });
+//     }
+
+//     console.log("📥 Audio file received:", {
+//       size: req.file.size,
+//       mimetype: req.file.mimetype,
+//       originalname: req.file.originalname
+//     });
+
+//     // Audio ni base64 ga aylantirish
+//     const audioBase64 = req.file.buffer.toString('base64');
+
+//     // Gemini model (audio qo'llab-quvvatlaydigan)
+//     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+//     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+//     // Prompt bilan audio yuborish
+//     const prompt = `Please transcribe this audio recording accurately. Only return the transcribed text, nothing else. The audio is in English.`;
+
+//     const result = await model.generateContent([
+//       prompt,
+//       {
+//         inlineData: {
+//           mimeType: req.file.mimetype || "audio/webm",
+//           data: audioBase64
+//         }
+//       }
+//     ]);
+
+//     const response = await result.response;
+//     const transcript = response.text().trim();
+
+//     console.log("✅ Gemini transcript:", transcript);
+
+//     if (!transcript || transcript.length < 10) {
+//       throw new Error("Ovoz tanilmadi. Iltimos, aniqroq gapiring va qayta urinib ko'ring.");
+//     }
+
+//     res.json({
+//       success: true,
+//       transcript: transcript
+//     });
+
+//   } catch (error) {
+//     console.error("❌ Gemini Speech-to-Text xatosi:", error);
+    
+//     res.json({ 
+//       error: error.message || "Audio tahlil qilishda xatolik yuz berdi", 
+//       success: false 
+//     });
+//   }
+// });
+
+
+// ============================================
+// AUDIO TO TEXT API - DEEPGRAM ✅
+// ============================================
 app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
@@ -1123,32 +1188,31 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
       originalname: req.file.originalname
     });
 
-    // Audio ni base64 ga aylantirish
-    const audioBase64 = req.file.buffer.toString('base64');
+    // Deepgram clientni yaratish
+    const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
 
-    // Gemini model (audio qo'llab-quvvatlaydigan)
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    // Prompt bilan audio yuborish
-    const prompt = `Please transcribe this audio recording accurately. Only return the transcribed text, nothing else. The audio is in English.`;
-
-    const result = await model.generateContent([
-      prompt,
+    // Audio buffer ni transcribe qilish
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+      req.file.buffer,
       {
-        inlineData: {
-          mimeType: req.file.mimetype || "audio/webm",
-          data: audioBase64
-        }
+        model: "nova-2",
+        language: "en",
+        smart_format: true,
+        punctuate: true,
+        diarize: false,
       }
-    ]);
+    );
 
-    const response = await result.response;
-    const transcript = response.text().trim();
+    if (error) {
+      throw new Error(error.message || "Deepgram API xatosi");
+    }
 
-    console.log("✅ Gemini transcript:", transcript);
+    // Transcriptni olish
+    const transcript = result.results.channels[0].alternatives[0].transcript;
 
-    if (!transcript || transcript.length < 10) {
+    console.log("✅ Deepgram transcript:", transcript);
+
+    if (!transcript || transcript.trim().length < 10) {
       throw new Error("Ovoz tanilmadi. Iltimos, aniqroq gapiring va qayta urinib ko'ring.");
     }
 
@@ -1158,7 +1222,7 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Gemini Speech-to-Text xatosi:", error);
+    console.error("❌ Deepgram API xatosi:", error);
     
     res.json({ 
       error: error.message || "Audio tahlil qilishda xatolik yuz berdi", 
