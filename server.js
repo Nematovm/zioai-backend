@@ -3,14 +3,11 @@
 require('dotenv').config();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-
-
-
 // Common Modules
-require("dotenv").config();
 const express = require("express");
 const path = require("path");
 const cors = require("cors");
+const multer = require('multer'); // ← FAQAT BU YERDA
 
 // Express app
 const app = express();
@@ -19,6 +16,12 @@ const PORT = process.env.PORT || 3000;
 // Gemini API configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+// Multer configuration (FAQAT BIR MARTA) ← BU YERDA
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 } // 25MB max
+});
 
 // Gemini API call function
 async function callGemini(prompt, maxTokens = 4096) {
@@ -39,7 +42,6 @@ async function callGemini(prompt, maxTokens = 4096) {
   
   return data.candidates[0].content.parts[0].text;
 }
-
 // Gemini with image
 async function callGeminiWithImage(prompt, base64Image, mediaType) {
   const response = await fetch(GEMINI_URL, {
@@ -1106,16 +1108,6 @@ process.on("SIGINT", () => process.exit(0));
 // ============================================
 // AUDIO TO TEXT API (Gemini Speech-to-Text)
 // ============================================
-// Bu kodni server.js ning "/api/speaking-feedback" dan OLDIN qo'shing
-
-const multer = require('multer');
-
-// Multer configuration
-const upload = multer({ 
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 } // 25MB max
-});
-
 app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
@@ -1168,7 +1160,7 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
   } catch (error) {
     console.error("❌ Gemini Speech-to-Text xatosi:", error);
     
-    res.status(500).json({ 
+    res.json({ 
       error: error.message || "Audio tahlil qilishda xatolik yuz berdi", 
       success: false 
     });
