@@ -402,18 +402,45 @@ Easy way to remember the word.
 });
 
 // 4. MOTIVATION QUOTES API
+// MOTIVATION QUOTES API
 app.get("/api/motivation", async (req, res) => {
   try {
-    const quotes = [
-      "🌟 Keep pushing forward! Every small step counts.",
-      "💪 You're doing great! Stay focused on your goals.",
-      "🚀 Believe in yourself! You're capable of amazing things.",
-      "✨ Don't give up! Success is just around the corner.",
-      "🎯 Stay motivated! Your hard work will pay off.",
+    const motivationalQuotes = [
+      { quote: "The more that you read, the more things you will know. The more that you learn, the more places you'll go.", author: "Dr. Seuss" },
+      { quote: "Education is the most powerful weapon which you can use to change the world.", author: "Nelson Mandela" },
+      { quote: "A reader lives a thousand lives before he dies. The man who never reads lives only one.", author: "George R.R. Martin" },
+      { quote: "The only thing that you absolutely have to know, is the location of the library.", author: "Albert Einstein" },
+      { quote: "Education is not the filling of a pail, but the lighting of a fire.", author: "William Butler Yeats" },
+      { quote: "Live as if you were to die tomorrow. Learn as if you were to live forever.", author: "Mahatma Gandhi" },
+      { quote: "The book you don't read won't help.", author: "Jim Rohn" },
+      { quote: "Reading is to the mind what exercise is to the body.", author: "Joseph Addison" },
+      { quote: "There is no friend as loyal as a book.", author: "Ernest Hemingway" },
+      { quote: "Today a reader, tomorrow a leader.", author: "Margaret Fuller" },
+      { quote: "Books are a uniquely portable magic.", author: "Stephen King" },
+      { quote: "The man who does not read has no advantage over the man who cannot read.", author: "Mark Twain" },
+      { quote: "Knowledge is power.", author: "Francis Bacon" },
+      { quote: "An investment in knowledge pays the best interest.", author: "Benjamin Franklin" },
+      { quote: "Learning never exhausts the mind.", author: "Leonardo da Vinci" },
+      { quote: "Education is the passport to the future.", author: "Malcolm X" },
+      { quote: "Once you learn to read, you will be forever free.", author: "Frederick Douglass" },
+      { quote: "The beautiful thing about learning is that nobody can take it away from you.", author: "B.B. King" },
+      { quote: "Reading is essential for those who seek to rise above the ordinary.", author: "Jim Rohn" },
+      { quote: "A book is a dream that you hold in your hand.", author: "Neil Gaiman" },
     ];
-    res.json({ success: true, quote: quotes[Math.floor(Math.random() * quotes.length)] });
+
+    const random = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
+
+    res.json({
+      success: true,
+      quote: `"${random.quote}"`,
+      author: `— ${random.author}`,
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message, success: false });
+    console.error("❌ Motivation API xatosi:", error);
+    res.status(500).json({
+      error: error.message,
+      success: false,
+    });
   }
 });
 
