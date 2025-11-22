@@ -546,3 +546,550 @@ app.listen(PORT, () => {
 
 process.on("SIGTERM", () => process.exit(0));
 process.on("SIGINT", () => process.exit(0));
+
+// ============================================
+// STUDY ASSISTANT API
+// ============================================
+app.post("/api/study-assistant", async (req, res) => {
+  try {
+    const { mode, content, language = "uz" } = req.body;
+
+    if (!content || content.trim() === "") {
+      return res.status(400).json({ error: "Content yuborilmadi", success: false });
+    }
+
+    const prompts = {
+      // 1. EXPLAIN ANY TOPIC
+      explain: {
+        uz: `Sen professional o'qituvchisan. Quyidagi mavzuni tushuntir:
+
+MAVZU: ${content}
+
+JAVOBDA QUYIDAGILARNI YOZ:
+
+**1. SODDA TUSHUNTIRISH:**
+Juda oddiy, bolaga tushuntirgandek.
+
+**2. ILMIY TUSHUNTIRISH:**
+To'liq ilmiy tarzda.
+
+**3. MISOLLAR:**
+3 ta real hayotiy misol.
+
+**4. MINI-QUIZ:**
+5 ta savol (javoblari bilan).
+
+**5. ESLAB QOLISH UCHUN 3 TA LIFEHACK:**
+Oson yodlash usullari.
+
+⚠️ Javobni faqat o'zbek tilida yoz.`,
+        ru: `Ты профессиональный учитель. Объясни следующую тему:
+
+ТЕМА: ${content}
+
+В ОТВЕТЕ УКАЖИ:
+
+**1. ПРОСТОЕ ОБЪЯСНЕНИЕ:**
+Очень просто, как ребенку.
+
+**2. НАУЧНОЕ ОБЪЯСНЕНИЕ:**
+Полное научное объяснение.
+
+**3. ПРИМЕРЫ:**
+3 примера из реальной жизни.
+
+**4. МИНИ-ТЕСТ:**
+5 вопросов (с ответами).
+
+**5. 3 ЛАЙФХАКА ДЛЯ ЗАПОМИНАНИЯ:**
+Легкие способы запомнить.
+
+⚠️ Отвечай только на русском языке.`,
+        en: `You are a professional teacher. Explain the following topic:
+
+TOPIC: ${content}
+
+IN YOUR ANSWER INCLUDE:
+
+**1. SIMPLE EXPLANATION:**
+Very simple, like explaining to a child.
+
+**2. SCIENTIFIC EXPLANATION:**
+Full scientific explanation.
+
+**3. EXAMPLES:**
+3 real-life examples.
+
+**4. MINI-QUIZ:**
+5 questions (with answers).
+
+**5. 3 MEMORY LIFEHACKS:**
+Easy ways to remember.
+
+⚠️ Answer only in English.`
+      },
+
+      // 2. MAKE NOTES / SUMMARY
+      notes: {
+        uz: `Sen professional konspekt yozuvchisan. Quyidagi matndan konspekt yarat:
+
+MATN: ${content}
+
+JAVOBDA QUYIDAGILARNI YOZ:
+
+**1. QISQA KONSPEKT:**
+Eng muhim ma'lumotlar.
+
+**2. MINDMAP:**
+Asosiy tushuncha → bog'liq tushunchalar (matn ko'rinishida).
+
+**3. 5 TA ASOSIY IDEA:**
+Eng muhim 5 ta fikr.
+
+**4. 10 TA TEZ-TEZ BERILADIGAN SAVOL:**
+Imtihonda chiqishi mumkin bo'lgan savollar.
+
+**5. FLASHCARDLAR (10 ta):**
+Savol → Javob formatida.
+
+⚠️ Javobni faqat o'zbek tilida yoz.`,
+        ru: `Ты профессиональный составитель конспектов. Создай конспект из следующего текста:
+
+ТЕКСТ: ${content}
+
+В ОТВЕТЕ УКАЖИ:
+
+**1. КРАТКИЙ КОНСПЕКТ:**
+Самая важная информация.
+
+**2. MINDMAP:**
+Главное понятие → связанные понятия (в текстовом виде).
+
+**3. 5 ГЛАВНЫХ ИДЕЙ:**
+5 самых важных мыслей.
+
+**4. 10 ЧАСТЫХ ВОПРОСОВ:**
+Вопросы, которые могут быть на экзамене.
+
+**5. ФЛЭШКАРТЫ (10 шт):**
+В формате Вопрос → Ответ.
+
+⚠️ Отвечай только на русском языке.`,
+        en: `You are a professional note-taker. Create notes from the following text:
+
+TEXT: ${content}
+
+IN YOUR ANSWER INCLUDE:
+
+**1. SHORT SUMMARY:**
+Most important information.
+
+**2. MINDMAP:**
+Main concept → related concepts (in text format).
+
+**3. 5 KEY IDEAS:**
+5 most important points.
+
+**4. 10 FREQUENTLY ASKED QUESTIONS:**
+Questions that might appear on exams.
+
+**5. FLASHCARDS (10):**
+In Question → Answer format.
+
+⚠️ Answer only in English.`
+      },
+
+      // 3. QUIZ MAKER
+      quiz: {
+        uz: `Sen professional test tuzuvchisan. Quyidagi mavzudan 3 darajali test yarat:
+
+MAVZU: ${content}
+
+JAVOBDA QUYIDAGILARNI YOZ:
+
+**1. EASY (5 ta savol):**
+Oson savollar, 4 ta variant, to'g'ri javob belgilangan.
+
+**2. MEDIUM (5 ta savol):**
+O'rtacha qiyinlikdagi savollar.
+
+**3. HARD / OLYMPIAD (5 ta savol):**
+Qiyin, olimpiada darajasidagi savollar.
+
+Har bir savolda:
+- Savol matni
+- A, B, C, D variantlar
+- ✅ To'g'ri javob
+- 💡 Tushuntirish
+
+⚠️ Javobni faqat o'zbek tilida yoz.`,
+        ru: `Ты профессиональный составитель тестов. Создай тест 3 уровней сложности:
+
+ТЕМА: ${content}
+
+В ОТВЕТЕ УКАЖИ:
+
+**1. EASY (5 вопросов):**
+Легкие вопросы, 4 варианта, правильный ответ отмечен.
+
+**2. MEDIUM (5 вопросов):**
+Вопросы средней сложности.
+
+**3. HARD / OLYMPIAD (5 вопросов):**
+Сложные, олимпиадные вопросы.
+
+Для каждого вопроса:
+- Текст вопроса
+- Варианты A, B, C, D
+- ✅ Правильный ответ
+- 💡 Объяснение
+
+⚠️ Отвечай только на русском языке.`,
+        en: `You are a professional test creator. Create a 3-level quiz:
+
+TOPIC: ${content}
+
+IN YOUR ANSWER INCLUDE:
+
+**1. EASY (5 questions):**
+Easy questions, 4 options, correct answer marked.
+
+**2. MEDIUM (5 questions):**
+Medium difficulty questions.
+
+**3. HARD / OLYMPIAD (5 questions):**
+Difficult, olympiad-level questions.
+
+For each question:
+- Question text
+- Options A, B, C, D
+- ✅ Correct answer
+- 💡 Explanation
+
+⚠️ Answer only in English.`
+      },
+
+      // 4. LEARNING PLAN
+      plan: {
+        uz: `Sen professional o'quv reja tuzuvchisan. Quyidagi mavzu uchun 7 kunlik reja tuz:
+
+MAVZU: ${content}
+
+JAVOBDA QUYIDAGILARNI YOZ:
+
+**1-KUN:** (Mavzu nomi)
+⏰ Vaqt: 1 soat
+📚 O'rganish: ...
+✏️ 3 ta mashq
+🎯 Maqsad: ...
+
+**2-KUN:** ...
+**3-KUN:** ...
+**4-KUN:** (REVIEW DAY - takrorlash)
+**5-KUN:** ...
+**6-KUN:** ...
+**7-KUN:** (FINAL TEST)
+
+**UMUMIY MASLAHATLAR:**
+Samarali o'qish uchun 3 ta maslahat.
+
+⚠️ Javobni faqat o'zbek tilida yoz.`,
+        ru: `Ты профессиональный составитель учебных планов. Составь план на 7 дней:
+
+ТЕМА: ${content}
+
+В ОТВЕТЕ УКАЖИ:
+
+**ДЕНЬ 1:** (Название темы)
+⏰ Время: 1 час
+📚 Изучить: ...
+✏️ 3 упражнения
+🎯 Цель: ...
+
+**ДЕНЬ 2:** ...
+**ДЕНЬ 3:** ...
+**ДЕНЬ 4:** (REVIEW DAY - повторение)
+**ДЕНЬ 5:** ...
+**ДЕНЬ 6:** ...
+**ДЕНЬ 7:** (ФИНАЛЬНЫЙ ТЕСТ)
+
+**ОБЩИЕ СОВЕТЫ:**
+3 совета для эффективной учебы.
+
+⚠️ Отвечай только на русском языке.`,
+        en: `You are a professional learning plan creator. Create a 7-day plan:
+
+TOPIC: ${content}
+
+IN YOUR ANSWER INCLUDE:
+
+**DAY 1:** (Topic name)
+⏰ Time: 1 hour
+📚 Learn: ...
+✏️ 3 exercises
+🎯 Goal: ...
+
+**DAY 2:** ...
+**DAY 3:** ...
+**DAY 4:** (REVIEW DAY)
+**DAY 5:** ...
+**DAY 6:** ...
+**DAY 7:** (FINAL TEST)
+
+**GENERAL TIPS:**
+3 tips for effective studying.
+
+⚠️ Answer only in English.`
+      },
+
+      // 5. EXPLAIN MISTAKES
+      mistakes: {
+        uz: `Sen professional o'qituvchisan. O'quvchining xatosini tushuntir:
+
+XATO/SAVOL: ${content}
+
+JAVOBDA QUYIDAGILARNI YOZ:
+
+**1. XATO TAHLILI:**
+Qayerda xato qilgan.
+
+**2. NOTO'G'RI QADAM:**
+Qaysi qadamda adashgan.
+
+**3. TO'G'RI YECHIM:**
+Qadam-ba-qadam to'g'ri yechim.
+
+**4. QOIDA/FORMULA:**
+Qaysi qoidani bilishi kerak.
+
+**5. O'XSHASH MISOL:**
+Mashq qilish uchun yana bir misol.
+
+**6. MASLAHAT:**
+Bunday xatolardan qochish uchun.
+
+⚠️ Javobni faqat o'zbek tilida yoz.`,
+        ru: `Ты профессиональный учитель. Объясни ошибку ученика:
+
+ОШИБКА/ВОПРОС: ${content}
+
+В ОТВЕТЕ УКАЖИ:
+
+**1. АНАЛИЗ ОШИБКИ:**
+Где была ошибка.
+
+**2. НЕПРАВИЛЬНЫЙ ШАГ:**
+На каком шаге ошибся.
+
+**3. ПРАВИЛЬНОЕ РЕШЕНИЕ:**
+Пошаговое правильное решение.
+
+**4. ПРАВИЛО/ФОРМУЛА:**
+Какое правило нужно знать.
+
+**5. ПОХОЖИЙ ПРИМЕР:**
+Еще один пример для практики.
+
+**6. СОВЕТ:**
+Как избежать таких ошибок.
+
+⚠️ Отвечай только на русском языке.`,
+        en: `You are a professional teacher. Explain the student's mistake:
+
+MISTAKE/QUESTION: ${content}
+
+IN YOUR ANSWER INCLUDE:
+
+**1. ERROR ANALYSIS:**
+Where the mistake was made.
+
+**2. WRONG STEP:**
+Which step went wrong.
+
+**3. CORRECT SOLUTION:**
+Step-by-step correct solution.
+
+**4. RULE/FORMULA:**
+What rule they need to know.
+
+**5. SIMILAR EXAMPLE:**
+Another example for practice.
+
+**6. TIP:**
+How to avoid such mistakes.
+
+⚠️ Answer only in English.`
+      },
+
+      // 6. FLASHCARD GENERATOR
+      flashcards: {
+        uz: `Sen professional flashcard yaratuvchisan. Quyidagi mavzudan flashcardlar yarat:
+
+MAVZU: ${content}
+
+JAVOBDA QUYIDAGILARNI YOZ:
+
+**FLASHCARDLAR (20 ta):**
+
+1. ❓ Savol: ...
+   ✅ Javob: ...
+
+2. ❓ Savol: ...
+   ✅ Javob: ...
+
+(20 tagacha davom et)
+
+**MINI-TEST (5 ta):**
+Flashcardlardan 5 ta test savol.
+
+**YODLASH STRATEGIYASI:**
+Bu flashcardlarni qanday yodlash kerak.
+
+⚠️ Javobni faqat o'zbek tilida yoz.`,
+        ru: `Ты профессиональный создатель флэшкарт. Создай флэшкарты по теме:
+
+ТЕМА: ${content}
+
+В ОТВЕТЕ УКАЖИ:
+
+**ФЛЭШКАРТЫ (20 шт):**
+
+1. ❓ Вопрос: ...
+   ✅ Ответ: ...
+
+2. ❓ Вопрос: ...
+   ✅ Ответ: ...
+
+(продолжай до 20)
+
+**МИНИ-ТЕСТ (5 шт):**
+5 тестовых вопросов из флэшкарт.
+
+**СТРАТЕГИЯ ЗАПОМИНАНИЯ:**
+Как запомнить эти флэшкарты.
+
+⚠️ Отвечай только на русском языке.`,
+        en: `You are a professional flashcard creator. Create flashcards on the topic:
+
+TOPIC: ${content}
+
+IN YOUR ANSWER INCLUDE:
+
+**FLASHCARDS (20):**
+
+1. ❓ Question: ...
+   ✅ Answer: ...
+
+2. ❓ Question: ...
+   ✅ Answer: ...
+
+(continue to 20)
+
+**MINI-TEST (5):**
+5 test questions from flashcards.
+
+**MEMORIZATION STRATEGY:**
+How to memorize these flashcards.
+
+⚠️ Answer only in English.`
+      },
+
+      // 7. SPEAKING/WRITING SCRIPT
+      script: {
+        uz: `Sen professional IELTS/yozuv mutaxassisisisan. Quyidagi mavzu uchun script yarat:
+
+MAVZU: ${content}
+
+JAVOBDA QUYIDAGILARNI YOZ:
+
+**1. SPEAKING SAMPLE ANSWER:**
+To'liq namuna javob (2-3 daqiqalik).
+
+**2. WRITING OUTLINE:**
+Yozma ish strukturasi.
+
+**3. GOOD EXAMPLE:**
+Yaxshi yozilgan paragraf namunasi.
+
+**4. BAD EXAMPLE:**
+Yomon yozilgan paragraf (xatolar bilan).
+
+**5. XATOLAR TAHLILI:**
+Bad exampledagi xatolar tushuntirishi.
+
+**6. FOYDALI IBORALAR:**
+10 ta foydali ibora shu mavzu uchun.
+
+⚠️ Javobni faqat o'zbek tilida yoz.`,
+        ru: `Ты профессиональный эксперт IELTS/письма. Создай скрипт по теме:
+
+ТЕМА: ${content}
+
+В ОТВЕТЕ УКАЖИ:
+
+**1. SPEAKING SAMPLE ANSWER:**
+Полный образец ответа (2-3 минуты).
+
+**2. WRITING OUTLINE:**
+Структура письменной работы.
+
+**3. GOOD EXAMPLE:**
+Хорошо написанный параграф.
+
+**4. BAD EXAMPLE:**
+Плохо написанный параграф (с ошибками).
+
+**5. АНАЛИЗ ОШИБОК:**
+Объяснение ошибок в bad example.
+
+**6. ПОЛЕЗНЫЕ ФРАЗЫ:**
+10 полезных фраз для этой темы.
+
+⚠️ Отвечай только на русском языке.`,
+        en: `You are a professional IELTS/writing expert. Create a script for the topic:
+
+TOPIC: ${content}
+
+IN YOUR ANSWER INCLUDE:
+
+**1. SPEAKING SAMPLE ANSWER:**
+Full sample answer (2-3 minutes).
+
+**2. WRITING OUTLINE:**
+Structure for written work.
+
+**3. GOOD EXAMPLE:**
+Well-written paragraph sample.
+
+**4. BAD EXAMPLE:**
+Poorly written paragraph (with errors).
+
+**5. ERROR ANALYSIS:**
+Explanation of errors in bad example.
+
+**6. USEFUL PHRASES:**
+10 useful phrases for this topic.
+
+⚠️ Answer only in English.`
+      }
+    };
+
+    if (!prompts[mode]) {
+      return res.status(400).json({ error: "Noto'g'ri mode", success: false });
+    }
+
+    const selectedPrompt = prompts[mode][language] || prompts[mode]["uz"];
+    const rawResponse = await callGemini(selectedPrompt, 4096);
+    const formattedResponse = formatAIResponse(rawResponse);
+
+    res.json({
+      success: true,
+      result: formattedResponse,
+      mode: mode
+    });
+
+  } catch (error) {
+    console.error("❌ Study Assistant API xatosi:", error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
