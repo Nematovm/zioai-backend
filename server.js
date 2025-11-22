@@ -1,9 +1,8 @@
-// ZIYOAI SERVER
+// ZIYOAI SERVER - GEMINI VERSION
 
 // Common Modules
 require("dotenv").config();
 const express = require("express");
-const Anthropic = require("@anthropic-ai/sdk");
 const path = require("path");
 const cors = require("cors");
 
@@ -11,10 +10,54 @@ const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Anthropic SDK
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// Gemini API configuration
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+// Gemini API call function
+async function callGemini(prompt, maxTokens = 4096) {
+  const response = await fetch(GEMINI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: maxTokens }
+    })
+  });
+  
+  const data = await response.json();
+  
+  if (data.error) {
+    throw new Error(data.error.message);
+  }
+  
+  return data.candidates[0].content.parts[0].text;
+}
+
+// Gemini with image
+async function callGeminiWithImage(prompt, base64Image, mediaType) {
+  const response = await fetch(GEMINI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: mediaType, data: base64Image } },
+          { text: prompt }
+        ]
+      }],
+      generationConfig: { maxOutputTokens: 4096 }
+    })
+  });
+  
+  const data = await response.json();
+  
+  if (data.error) {
+    throw new Error(data.error.message);
+  }
+  
+  return data.candidates[0].content.parts[0].text;
+}
 
 // Middleware
 app.use(
@@ -30,9 +73,7 @@ app.use(
   })
 );
 
-// Preflight
 app.options("*", cors());
-
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(express.static(__dirname));
@@ -43,41 +84,16 @@ function formatAIResponse(text) {
   let sectionOpen = false;
 
   html = html.replace(/\*\*(\d+)\.\s*([^*]+)\*\*/g, (match, number, title) => {
-    const icons = {
-      1: "🔍",
-      2: "✅",
-      3: "📐",
-      4: "📝",
-      5: "💡",
-      6: "📖",
-      7: "🚀",
-    };
-
+    const icons = { 1: "🔍", 2: "✅", 3: "📐", 4: "📝", 5: "💡", 6: "📖", 7: "🚀" };
     let close = sectionOpen ? "</div></div>" : "";
     sectionOpen = true;
-
-    return (
-      close +
-      `<div class="ai-section">
-         <div class="ai-heading">
-           <span class="ai-icon">${icons[number] || "📌"}</span>
-           <span class="ai-number">${number}</span>
-           <span class="ai-title">${title.trim()}</span>
-         </div>
-         <div class="ai-body">`
-    );
+    return close + `<div class="ai-section"><div class="ai-heading"><span class="ai-icon">${icons[number] || "📌"}</span><span class="ai-number">${number}</span><span class="ai-title">${title.trim()}</span></div><div class="ai-body">`;
   });
 
-  html = html.replace(
-    /\*\*([^*]+)\*\*/g,
-    '<strong class="ai-bold">$1</strong>'
-  );
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="ai-bold">$1</strong>');
   html = html.replace(/^[-•]\s+(.+)$/gm, '<div class="ai-bullet">$1</div>');
   html = html.replace(/`([^`]+)`/g, '<code class="ai-code">$1</code>');
-  html = html.replace(
-    /(\d+\s*[\+\-\*\/]\s*\d+\s*=\s*\d+)/g,
-    '<span class="ai-formula">$1</span>'
-  );
+  html = html.replace(/(\d+\s*[\+\-\*\/]\s*\d+\s*=\s*\d+)/g, '<span class="ai-formula">$1</span>');
   html = html.replace(/\n\n+/g, "<br><br>");
   html = html.replace(/\n/g, "<br>");
   html = html.replace(/^[#>\s]+/gm, "");
@@ -86,7 +102,6 @@ function formatAIResponse(text) {
   html = html.replace(/---|```|`/g, "");
 
   if (sectionOpen) html += "</div></div>";
-
   return html;
 }
 
@@ -98,8 +113,7 @@ app.post("/api/fix-homework", async (req, res) => {
     const prompts = {
       uz: {
         instruction: `Sen professional o'qituvchi va matematika mutaxassisisisan.`,
-        sections: `
-📋 JAVOBINGIZDA QUYIDAGIlarni YOZING:
+        sections: `📋 JAVOBINGIZDA QUYIDAGILARNI YOZING:
 
 **1. TEKSHIRISH NATIJASI:**
 Vazifa to'g'ri yoki noto'g'ri ekanligini yoz.
@@ -126,8 +140,7 @@ Ko'nikma rivojlantirish uchun maslahat.
       },
       ru: {
         instruction: `Ты профессиональный преподаватель и эксперт по математике.`,
-        sections: `
-📋 В ОТВЕТЕ УКАЖИ:
+        sections: `📋 В ОТВЕТЕ УКАЖИ:
 
 **1. РЕЗУЛЬТАТ ПРОВЕРКИ:**
 Правильное задание или нет.
@@ -154,8 +167,7 @@ Ko'nikma rivojlantirish uchun maslahat.
       },
       en: {
         instruction: `You are a professional teacher and math expert.`,
-        sections: `
-📋 IN YOUR ANSWER INCLUDE:
+        sections: `📋 IN YOUR ANSWER INCLUDE:
 
 **1. CHECK RESULT:**
 Is the task correct or incorrect.
@@ -183,77 +195,33 @@ Advice for skill development.
     };
 
     const selectedPrompt = prompts[language] || prompts["uz"];
-
-    let messageContent;
+    let rawResponse;
 
     if (type === "image") {
       const base64Data = image.split(",")[1];
       const mediaType = image.split(";")[0].split(":")[1];
-
-      messageContent = [
-        {
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: mediaType,
-            data: base64Data,
-          },
-        },
-        {
-          type: "text",
-          text: `${selectedPrompt.instruction}
-
-Rasmdagi uy vazifani tekshir va batafsil tushuntir.
-
-${selectedPrompt.sections}`,
-        },
-      ];
+      const prompt = `${selectedPrompt.instruction}\n\nRasmdagi uy vazifani tekshir va batafsil tushuntir.\n\n${selectedPrompt.sections}`;
+      rawResponse = await callGeminiWithImage(prompt, base64Data, mediaType);
     } else {
-      messageContent = `${selectedPrompt.instruction}
-
-📝 UY VAZIFA:
-${homework}
-
-${selectedPrompt.sections}`;
+      const prompt = `${selectedPrompt.instruction}\n\n📝 UY VAZIFA:\n${homework}\n\n${selectedPrompt.sections}`;
+      rawResponse = await callGemini(prompt);
     }
 
-    const message = await anthropic.messages.create({
-      model: "claude-opus-4-1",
-      max_tokens: 4096,
-      messages: [
-        {
-          role: "user",
-          content: messageContent,
-        },
-      ],
-    });
-
-    const rawResponse = message.content[0].text;
     const formattedResponse = formatAIResponse(rawResponse);
-
-    res.json({
-      success: true,
-      correctedHomework: formattedResponse,
-    });
+    res.json({ success: true, correctedHomework: formattedResponse });
   } catch (error) {
     console.error("❌ Homework API xatosi:", error);
-    res.status(500).json({
-      error: error.message,
-      success: false,
-    });
+    res.status(500).json({ error: error.message, success: false });
   }
 });
 
-// GRAMMAR CHECKER
+// 2. GRAMMAR CHECKER
 app.post("/api/check-grammar", async (req, res) => {
   try {
     const { text, language = "uz" } = req.body;
 
     if (!text || text.trim() === "") {
-      return res.status(400).json({
-        error: "Text yuborilmadi",
-        success: false,
-      });
+      return res.status(400).json({ error: "Text yuborilmadi", success: false });
     }
 
     const prompts = {
@@ -277,7 +245,6 @@ Har bir xatoni nima uchun tuzatganingni tushuntir.
 Kelajakda xatolardan qochish uchun maslahat ber.
 
 ⚠️ JAVOBNI FAQAT O'ZBEK TILIDA BER! 🇺🇿`,
-
       ru: `Ты профессиональный эксперт по грамматике.
 
 ТЕКСТ:
@@ -298,7 +265,6 @@ ${text}
 Советы, как избегать ошибок.
 
 ⚠️ ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! 🇷🇺`,
-
       en: `You are a professional grammar expert.
 
 TEXT:
@@ -321,45 +287,22 @@ Tips to avoid errors.
 ⚠️ ANSWER ONLY IN ENGLISH! 🇬🇧`,
     };
 
-    const message = await anthropic.messages.create({
-      model: "claude-opus-4-1",
-      max_tokens: 3096,
-      messages: [
-        {
-          role: "user",
-          content: prompts[language] || prompts["uz"],
-        },
-      ],
-    });
-
-    const rawResponse = message.content[0].text;
+    const rawResponse = await callGemini(prompts[language] || prompts["uz"], 3096);
     const formattedResponse = formatAIResponse(rawResponse);
-
-    res.json({
-      success: true,
-      result: formattedResponse,
-    });
+    res.json({ success: true, result: formattedResponse });
   } catch (error) {
     console.error("❌ Grammar API xatosi:", error);
-    res.status(500).json({
-      error: error.message,
-      success: false,
-    });
+    res.status(500).json({ error: error.message, success: false });
   }
 });
 
-// VOCABULARY BUILDER
+// 3. VOCABULARY BUILDER
 app.post("/api/vocabulary", async (req, res) => {
   try {
     const { word, language = "uz" } = req.body;
 
-    console.log("📚 Vocabulary so'rov:", { word, language });
-
     if (!word || word.trim() === "") {
-      return res.status(400).json({
-        error: "So'z yuborilmadi",
-        success: false,
-      });
+      return res.status(400).json({ error: "So'z yuborilmadi", success: false });
     }
 
     const prompts = {
@@ -391,12 +334,11 @@ Qarama-qarshi ma'noli so'zlar.
 So'zni eslab qolish uchun qulay usul.
 
 ⚠️ Javobni faqat o'zbek tilida yoz.`,
-
       ru: `Ты эксперт по словарю. Предоставь полную информацию о следующем слове:
 
 СЛОВО: ${word}
 
-В ОТВЕТЕ УКAЖИ:
+В ОТВЕТЕ УКАЖИ:
 
 **1. ЗНАЧЕНИЕ:**
 Основное значение слова.
@@ -420,7 +362,6 @@ Noun, verb, adjective и т.д.
 Удобный способ запомнить слово.
 
 ⚠️ Отвечай только на русском языке.`,
-
       en: `You are a dictionary expert. Provide complete information about the following word:
 
 WORD: ${word}
@@ -451,97 +392,38 @@ Easy way to remember the word.
 ⚠️ Answer ONLY in English.`,
     };
 
-    const selectedPrompt = prompts[language] || prompts["uz"];
-
-    const message = await anthropic.messages.create({
-      model: "claude-opus-4-1",
-      max_tokens: 2048,
-      messages: [
-        {
-          role: "user",
-          content: selectedPrompt,
-        },
-      ],
-    });
-
-    const rawResponse = message.content[0].text;
+    const rawResponse = await callGemini(prompts[language] || prompts["uz"], 2048);
     const formattedResponse = formatAIResponse(rawResponse);
-
-    res.json({
-      success: true,
-      result: formattedResponse,
-      word: word,
-    });
+    res.json({ success: true, result: formattedResponse, word: word });
   } catch (error) {
     console.error("❌ Vocabulary API xatosi:", error);
-    res.status(500).json({
-      error: error.message,
-      success: false,
-    });
+    res.status(500).json({ error: error.message, success: false });
   }
 });
 
-// MOTIVATION QUOTES API
+// 4. MOTIVATION QUOTES API
 app.get("/api/motivation", async (req, res) => {
   try {
-    const motivationalQuotes = [
+    const quotes = [
       "🌟 Keep pushing forward! Every small step counts.",
       "💪 You're doing great! Stay focused on your goals.",
       "🚀 Believe in yourself! You're capable of amazing things.",
       "✨ Don't give up! Success is just around the corner.",
       "🎯 Stay motivated! Your hard work will pay off.",
-      "🌈 You're stronger than you think! Keep going.",
-      "⭐ Dream big! You have the power to achieve it.",
-      "🔥 Stay focused! Great things take time.",
-      "💡 Learn something new today! Knowledge is power.",
-      "🎓 Education is the key! Keep learning and growing.",
-      "📚 Reading today, leading tomorrow!",
-      "🌟 Your future depends on what you do today!",
-      "💫 Small progress is still progress!",
-      "🎨 Creativity takes courage! Keep creating.",
-      "🏆 Success starts with self-discipline!",
     ];
-
-    const randomQuote =
-      motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
-
-    res.json({
-      success: true,
-      quote: randomQuote,
-    });
+    res.json({ success: true, quote: quotes[Math.floor(Math.random() * quotes.length)] });
   } catch (error) {
-    console.error("❌ Motivation API xatosi:", error);
-    res.status(500).json({
-      error: error.message,
-      success: false,
-    });
+    res.status(500).json({ error: error.message, success: false });
   }
 });
 
-// QUIZ GENERATOR API
+// 5. QUIZ GENERATOR API
 app.post("/api/generate-quiz", async (req, res) => {
   try {
     const { article, questionCount, difficulty, language = "uz" } = req.body;
 
-    console.log("📝 Quiz so'rov:", {
-      articleLength: article?.length,
-      questionCount,
-      difficulty,
-      language,
-    });
-
     if (!article || article.trim() === "") {
-      return res.status(400).json({
-        error: "Matn yuborilmadi",
-        success: false,
-      });
-    }
-
-    if (!questionCount || questionCount < 1 || questionCount > 20) {
-      return res.status(400).json({
-        error: "Savollar soni 1 dan 20 gacha bo'lishi kerak",
-        success: false,
-      });
+      return res.status(400).json({ error: "Matn yuborilmadi", success: false });
     }
 
     const difficultyNames = {
@@ -550,116 +432,30 @@ app.post("/api/generate-quiz", async (req, res) => {
       en: { easy: "easy", medium: "medium", hard: "hard" },
     };
 
-    const prompts = {
-      uz: {
-        instruction: `Sen professional test tuzuvchisissan. Quyidagi matndan ${questionCount} ta ${
-          difficultyNames.uz[difficulty] || "o'rtacha"
-        } darajali test savollarini yarating.
+    const prompt = `Sen professional test tuzuvchisissan. Quyidagi matndan ${questionCount} ta ${difficultyNames[language]?.[difficulty] || "o'rtacha"} darajali test savollarini yarat.
+
+📖 MATN:
+${article}
 
 📋 QOIDALAR:
 - Har bir savol 4 ta variant bilan
 - To'g'ri javobni aniq belgilang (0-3 orasida index)
 - Har bir savolga qisqa tushuntirish qo'shing
-- Savollar matn mazmuniga mos bo'lsin
-- Variantlar qisqa va aniq bo'lsin
 
-⚠️ JAVOBNI FAQAT JSON FORMATDA BERING, BOSHQA HECH NARSA YOZMANG!`,
-
-        example: `
-MISOL:
+⚠️ JAVOBNI FAQAT JSON FORMATDA BER:
 {
   "questions": [
     {
       "question": "Savol matni?",
-      "options": ["Variant A", "Variant B", "Variant C", "Variant D"],
+      "options": ["A", "B", "C", "D"],
       "correctAnswer": 0,
-      "explanation": "Bu to'g'ri javob, chunki..."
+      "explanation": "Tushuntirish"
     }
   ]
-}`,
-      },
+}`;
 
-      ru: {
-        instruction: `Ты профессиональный составитель тестов. Создай ${questionCount} тестовых вопросов уровня ${
-          difficultyNames.ru[difficulty] || "средний"
-        } из следующего текста.
-
-📋 ПРАВИЛА:
-- Каждый вопрос с 4 вариантами
-- Четко укажи правильный ответ (индекс 0-3)
-- Добавь краткое объяснение к каждому вопросу
-- Вопросы должны соответствовать содержанию текста
-- Варианты должны быть краткими и точными
-
-⚠️ ОТВЕЧАЙ ТОЛЬКО В ФОРМАТЕ JSON, НИЧЕГО БОЛЬШЕ НЕ ПИШИ!`,
-
-        example: `
-ПРИМЕР:
-{
-  "questions": [
-    {
-      "question": "Текст вопроса?",
-      "options": ["Вариант A", "Вариант B", "Вариант C", "Вариант D"],
-      "correctAnswer": 0,
-      "explanation": "Это правильный ответ, потому что..."
-    }
-  ]
-}`,
-      },
-
-      en: {
-        instruction: `You are a professional test creator. Create ${questionCount} ${
-          difficulty || "medium"
-        } level test questions from the following text.
-
-📋 RULES:
-- Each question with 4 options
-- Clearly indicate the correct answer (index 0-3)
-- Add a brief explanation to each question
-- Questions should match the text content
-- Options should be concise and accurate
-
-⚠️ RESPOND ONLY IN JSON FORMAT, WRITE NOTHING ELSE!`,
-
-        example: `
-EXAMPLE:
-{
-  "questions": [
-    {
-      "question": "Question text?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": 0,
-      "explanation": "This is correct because..."
-    }
-  ]
-}`,
-      },
-    };
-
-    const selectedPrompt = prompts[language] || prompts["uz"];
-
-    const message = await anthropic.messages.create({
-      model: "claude-opus-4-1",
-      max_tokens: 4096,
-      temperature: 0.7,
-      messages: [
-        {
-          role: "user",
-          content: `${selectedPrompt.instruction}
-
-📖 MATN:
-${article}
-
-${selectedPrompt.example}
-
-⚠️ ESLATMA: Faqat JSON format! Markdown yoki boshqa formatlar kerak emas!`,
-        },
-      ],
-    });
-
-    let rawResponse = message.content[0].text;
-    console.log("🔍 Claude javobi:", rawResponse.substring(0, 200) + "...");
-
+    let rawResponse = await callGemini(prompt, 4096);
+    
     rawResponse = rawResponse
       .replace(/```json\n?/g, "")
       .replace(/```\n?/g, "")
@@ -667,97 +463,35 @@ ${selectedPrompt.example}
       .replace(/[^}]*$/, "")
       .trim();
 
-    let quizData;
-    try {
-      quizData = JSON.parse(rawResponse);
-    } catch (parseError) {
-      console.error("❌ JSON parse xatosi:", parseError);
-
-      return res.status(500).json({
-        error:
-          "Quiz yaratishda xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.",
-        success: false,
-        details: parseError.message,
-      });
-    }
-
-    if (!quizData.questions || !Array.isArray(quizData.questions)) {
-      return res.status(500).json({
-        error: "Quiz formati noto'g'ri",
-        success: false,
-      });
-    }
-
+    const quizData = JSON.parse(rawResponse);
+    
     const validQuestions = quizData.questions.filter(
-      (q) =>
-        q.question &&
-        Array.isArray(q.options) &&
-        q.options.length === 4 &&
-        typeof q.correctAnswer === "number" &&
-        q.correctAnswer >= 0 &&
-        q.correctAnswer < 4 &&
-        q.explanation
+      (q) => q.question && Array.isArray(q.options) && q.options.length === 4 &&
+        typeof q.correctAnswer === "number" && q.correctAnswer >= 0 && q.correctAnswer < 4
     );
 
-    if (validQuestions.length === 0) {
-      return res.status(500).json({
-        error: "Hech qanday to'g'ri savol yaratilmadi",
-        success: false,
-      });
-    }
-
-    console.log(`✅ ${validQuestions.length} ta savol yaratildi`);
-
-    res.json({
-      success: true,
-      questions: validQuestions,
-      totalQuestions: validQuestions.length,
-    });
+    res.json({ success: true, questions: validQuestions, totalQuestions: validQuestions.length });
   } catch (error) {
     console.error("❌ Quiz API xatosi:", error);
-    res.status(500).json({
-      error: "Server xatosi: " + error.message,
-      success: false,
-    });
+    res.status(500).json({ error: error.message, success: false });
   }
 });
 
-// QUIZ STATISTICS API
+// 6. QUIZ STATISTICS API
 app.post("/api/quiz-stats", async (req, res) => {
   try {
-    const { score, totalQuestions, timeSpent, difficulty } = req.body;
-
+    const { score, totalQuestions } = req.body;
     const percentage = ((score / totalQuestions) * 100).toFixed(0);
 
-    let message = "";
-    let emoji = "";
+    let message = "", emoji = "";
+    if (percentage >= 90) { message = "Ajoyib! 🎉"; emoji = "🏆"; }
+    else if (percentage >= 70) { message = "Yaxshi! 💪"; emoji = "⭐"; }
+    else if (percentage >= 50) { message = "Yomon emas! 📚"; emoji = "📖"; }
+    else { message = "Mashq qiling! 🎯"; emoji = "💡"; }
 
-    if (percentage >= 90) {
-      message = "Ajoyib! Siz a'lo natija ko'rsatdingiz! 🎉";
-      emoji = "🏆";
-    } else if (percentage >= 70) {
-      message = "Yaxshi! Davom eting! 💪";
-      emoji = "⭐";
-    } else if (percentage >= 50) {
-      message = "Yomon emas! Yana mashq qiling! 📚";
-      emoji = "📖";
-    } else {
-      message = "Mashq qilishda davom eting! 🎯";
-      emoji = "💡";
-    }
-
-    res.json({
-      success: true,
-      message,
-      emoji,
-      percentage: parseInt(percentage),
-    });
+    res.json({ success: true, message, emoji, percentage: parseInt(percentage) });
   } catch (error) {
-    console.error("❌ Quiz stats xatosi:", error);
-    res.status(500).json({
-      error: error.message,
-      success: false,
-    });
+    res.status(500).json({ error: error.message, success: false });
   }
 });
 
@@ -765,46 +499,23 @@ app.post("/api/quiz-stats", async (req, res) => {
 app.get("/api/test", (req, res) => {
   res.json({
     status: "OK",
-    message: "Server ishlayapti ✅",
-    hasApiKey: !!process.env.ANTHROPIC_API_KEY,
+    message: "Server ishlayapti ✅ (Gemini)",
+    hasApiKey: !!process.env.GEMINI_API_KEY,
     timestamp: new Date().toISOString(),
-    endpoints: [
-      "POST /api/fix-homework",
-      "POST /api/check-grammar",
-      "POST /api/vocabulary",
-      "GET  /api/motivation",
-      "POST /api/generate-quiz",
-      "POST /api/quiz-stats",
-    ],
   });
 });
 
 // 404 HANDLER
 app.use((req, res) => {
-  res.status(404).json({
-    error: "Sahifa topilmadi",
-    path: req.path,
-  });
+  res.status(404).json({ error: "Sahifa topilmadi", path: req.path });
 });
 
-// SERVERNI ISHGA TUSHIRISH
+// START SERVER
 app.listen(PORT, () => {
-  console.log(`🚀 ZiyoAI Server has been started!`);
+  console.log(`🚀 ZiyoAI Server (Gemini) ishga tushdi!`);
   console.log(`📍 URL: http://localhost:${PORT}`);
-  console.log(
-    `🔑 API Key: ${process.env.ANTHROPIC_API_KEY ? "✅ Added" : "❌ No"}`
-  );
-  console.log(`⏰ Time: ${new Date().toLocaleString("uz-UZ")}`);
-  console.log(`📊 Endpoints: 7 ta`);
+  console.log(`🔑 Gemini API Key: ${process.env.GEMINI_API_KEY ? "✅" : "❌"}`);
 });
 
-// GRACEFUL SHUTDOWN
-process.on("SIGTERM", () => {
-  console.log("👋 Server to'xtatilmoqda...");
-  process.exit(0);
-});
-
-process.on("SIGINT", () => {
-  console.log("\n👋 Server to'xtatilmoqda...");
-  process.exit(0);
-});
+process.on("SIGTERM", () => process.exit(0));
+process.on("SIGINT", () => process.exit(0));
