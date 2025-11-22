@@ -1096,3 +1096,192 @@ app.listen(PORT, () => {
 process.on("SIGTERM", () => process.exit(0));
 process.on("SIGINT", () => process.exit(0));
 
+
+// ============================================
+// SPEAKING FEEDBACK API
+// ============================================
+app.post("/api/speaking-feedback", async (req, res) => {
+  try {
+    const { transcript, topic, examType, language = "uz" } = req.body;
+
+    if (!transcript || transcript.trim() === "") {
+      return res.status(400).json({ error: "Transcript yuborilmadi", success: false });
+    }
+
+    if (!topic || topic.trim() === "") {
+      return res.status(400).json({ error: "Topic yuborilmadi", success: false });
+    }
+
+    const prompts = {
+      uz: `Sen professional ${examType} speaking examiner san. Quyidagi speaking javobini baholab, batafsil feedback ber:
+
+📝 TOPIC: ${topic}
+
+🎤 FOYDALANUVCHI JAVOBI:
+${transcript}
+
+JAVOBDA QUYIDAGILARNI YOZ:
+
+**1. UMUMIY BAHOLASH:**
+${examType === 'IELTS' ? 'IELTS Band Score (1-9)' : 'CEFR Ball (0-75) va Level (A1-C2)'}
+
+**2. BATAFSIL BALLAR:**
+${examType === 'IELTS' ? `
+- Fluency & Coherence: X/9
+- Lexical Resource: X/9
+- Grammatical Range & Accuracy: X/9
+- Pronunciation: X/9
+- OVERALL BAND: X/9` : `
+- Fluency (Ravonlik): X/15
+- Vocabulary (Lug'at): X/15
+- Grammar (Grammatika): X/15
+- Pronunciation (Talaffuz): X/15
+- Content (Mazmun): X/15
+- JAMI BALL: X/75
+- LEVEL: (0-37: A1-A2 | 38-50: B1 | 51-64: B2 | 65-75: C1)
+
+📊 MULTILEVEL BALL TIZIMI:
+• 0-37 ball = A1-A2 (Boshlang'ich)
+• 38-50 ball = B1 (O'rta)
+• 51-64 ball = B2 (O'rta-yuqori)
+• 65-75 ball = C1 (Yuqori)`}
+
+**3. KUCHLI TOMONLAR ✅:**
+Nima yaxshi qilgan - 3-5 ta punkt.
+
+**4. YAXSHILASH KERAK ⚠️:**
+Nima ustida ishlash kerak - 3-5 ta punkt.
+
+**5. XATOLAR TAHLILI ❌:**
+Grammatik va leksik xatolar ro'yxati va to'g'ri varianti.
+
+**6. SAMPLE ANSWER 📝:**
+Shu topic uchun ${examType === 'IELTS' ? 'Band 8-9' : 'C1-C2'} darajadagi namuna javob.
+
+**7. FOYDALI IBORALAR 💡:**
+Shu topic uchun 10 ta foydali ibora.
+
+**8. TAVSIYALAR 🎯:**
+- Ko'proq qilish kerak: ...
+- Kamroq qilish kerak: ...
+- Tashlab ketish kerak: ...
+- Mashq qilish uchun: ...
+
+⚠️ Javobni faqat o'zbek tilida yoz!`,
+
+      ru: `Ты профессиональный ${examType} speaking examiner. Оцени следующий speaking ответ и дай подробный фидбэк:
+
+📝 ТЕМА: ${topic}
+
+🎤 ОТВЕТ ПОЛЬЗОВАТЕЛЯ:
+${transcript}
+
+В ОТВЕТЕ УКАЖИ:
+
+**1. ОБЩАЯ ОЦЕНКА:**
+${examType === 'IELTS' ? 'IELTS Band Score (1-9)' : 'CEFR Балл (0-75) и Уровень (A1-C2)'}
+
+**2. ДЕТАЛЬНЫЕ БАЛЛЫ:**
+${examType === 'IELTS' ? `
+- Fluency & Coherence: X/9
+- Lexical Resource: X/9
+- Grammatical Range & Accuracy: X/9
+- Pronunciation: X/9
+- OVERALL BAND: X/9` : `
+- Fluency (Беглость): X/15
+- Vocabulary (Словарный запас): X/15
+- Grammar (Грамматика): X/15
+- Pronunciation (Произношение): X/15
+- Content (Содержание): X/15
+- ОБЩИЙ БАЛЛ: X/75
+- УРОВЕНЬ: A1/A2/B1/B2/C1/C2`}
+
+**3. СИЛЬНЫЕ СТОРОНЫ ✅:**
+Что хорошо - 3-5 пунктов.
+
+**4. НУЖНО УЛУЧШИТЬ ⚠️:**
+Над чем работать - 3-5 пунктов.
+
+**5. АНАЛИЗ ОШИБОК ❌:**
+Список грамматических и лексических ошибок с правильными вариантами.
+
+**6. SAMPLE ANSWER 📝:**
+Образец ответа уровня ${examType === 'IELTS' ? 'Band 8-9' : 'C1-C2'} для этой темы.
+
+**7. ПОЛЕЗНЫЕ ФРАЗЫ 💡:**
+10 полезных фраз для этой темы.
+
+**8. РЕКОМЕНДАЦИИ 🎯:**
+- Делать больше: ...
+- Делать меньше: ...
+- Перестать делать: ...
+- Для практики: ...
+
+⚠️ Отвечай только на русском языке!`,
+
+      en: `You are a professional ${examType} speaking examiner. Evaluate the following speaking response and provide detailed feedback:
+
+📝 TOPIC: ${topic}
+
+🎤 USER'S RESPONSE:
+${transcript}
+
+IN YOUR ANSWER INCLUDE:
+
+**1. OVERALL ASSESSMENT:**
+${examType === 'IELTS' ? 'IELTS Band Score (1-9)' : 'CEFR Score (0-75) and Level (A1-C2)'}
+
+**2. DETAILED SCORES:**
+${examType === 'IELTS' ? `
+- Fluency & Coherence: X/9
+- Lexical Resource: X/9
+- Grammatical Range & Accuracy: X/9
+- Pronunciation: X/9
+- OVERALL BAND: X/9` : `
+- Fluency: X/15
+- Vocabulary: X/15
+- Grammar: X/15
+- Pronunciation: X/15
+- Content: X/15
+- TOTAL SCORE: X/75
+- LEVEL: A1/A2/B1/B2/C1/C2`}
+
+**3. STRENGTHS ✅:**
+What was done well - 3-5 points.
+
+**4. AREAS FOR IMPROVEMENT ⚠️:**
+What needs work - 3-5 points.
+
+**5. ERROR ANALYSIS ❌:**
+List of grammatical and lexical errors with corrections.
+
+**6. SAMPLE ANSWER 📝:**
+A ${examType === 'IELTS' ? 'Band 8-9' : 'C1-C2'} level sample answer for this topic.
+
+**7. USEFUL PHRASES 💡:**
+10 useful phrases for this topic.
+
+**8. RECOMMENDATIONS 🎯:**
+- Do more of: ...
+- Do less of: ...
+- Stop doing: ...
+- Practice by: ...
+
+⚠️ Answer only in English!`
+    };
+
+    const selectedPrompt = prompts[language] || prompts["uz"];
+    const rawResponse = await callGemini(selectedPrompt, 4096);
+    const formattedResponse = formatAIResponse(rawResponse);
+
+    res.json({
+      success: true,
+      result: formattedResponse,
+      examType: examType
+    });
+
+  } catch (error) {
+    console.error("❌ Speaking Feedback API xatosi:", error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
