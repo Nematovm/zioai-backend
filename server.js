@@ -522,30 +522,6 @@ app.post("/api/quiz-stats", async (req, res) => {
   }
 });
 
-// TEST ENDPOINT
-app.get("/api/test", (req, res) => {
-  res.json({
-    status: "OK",
-    message: "Server ishlayapti ✅ (Gemini)",
-    hasApiKey: !!process.env.GEMINI_API_KEY,
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// 404 HANDLER
-app.use((req, res) => {
-  res.status(404).json({ error: "Sahifa topilmadi", path: req.path });
-});
-
-// START SERVER
-app.listen(PORT, () => {
-  console.log(`🚀 ZiyoAI Server (Gemini) ishga tushdi!`);
-  console.log(`📍 URL: http://localhost:${PORT}`);
-  console.log(`🔑 Gemini API Key: ${process.env.GEMINI_API_KEY ? "✅" : "❌"}`);
-});
-
-process.on("SIGTERM", () => process.exit(0));
-process.on("SIGINT", () => process.exit(0));
 
 // ============================================
 // STUDY ASSISTANT API
@@ -1093,3 +1069,30 @@ Explanation of errors in bad example.
     res.status(500).json({ error: error.message, success: false });
   }
 });
+
+
+// TEST ENDPOINT
+app.get("/api/test", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "Server ishlayapti ✅ (Gemini)",
+    hasApiKey: !!process.env.GEMINI_API_KEY,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 404 HANDLER
+app.use((req, res) => {
+  res.status(404).json({ error: "Sahifa topilmadi", path: req.path });
+});
+
+// START SERVER
+app.listen(PORT, () => {
+  console.log(`🚀 ZiyoAI Server (Gemini) ishga tushdi!`);
+  console.log(`📍 URL: http://localhost:${PORT}`);
+  console.log(`🔑 Gemini API Key: ${process.env.GEMINI_API_KEY ? "✅" : "❌"}`);
+});
+
+process.on("SIGTERM", () => process.exit(0));
+process.on("SIGINT", () => process.exit(0));
+
