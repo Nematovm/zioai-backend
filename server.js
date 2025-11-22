@@ -4,12 +4,12 @@ require('dotenv').config();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Common Modules
-// DEEPGRAM SDK
-const { createClient } = require("@deepgram/sdk");
 const express = require("express");
 const path = require("path");
 const cors = require("cors");
 const multer = require('multer'); // ← FAQAT BU YERDA
+// DEEPGRAM SDK
+const { createClient } = require("@deepgram/sdk");
 
 // Express app
 const app = express();
@@ -1188,6 +1188,11 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
       originalname: req.file.originalname
     });
 
+    // Deepgram API Key tekshirish
+    if (!process.env.DEEPGRAM_API_KEY) {
+      throw new Error("DEEPGRAM_API_KEY not found in .env file");
+    }
+
     // Deepgram clientni yaratish
     const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
 
@@ -1204,6 +1209,7 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
     );
 
     if (error) {
+      console.error("Deepgram API Error:", error);
       throw new Error(error.message || "Deepgram API xatosi");
     }
 
@@ -1224,7 +1230,7 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
   } catch (error) {
     console.error("❌ Deepgram API xatosi:", error);
     
-    res.json({ 
+    res.status(500).json({ 
       error: error.message || "Audio tahlil qilishda xatolik yuz berdi", 
       success: false 
     });
