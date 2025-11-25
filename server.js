@@ -69,19 +69,22 @@ async function callGeminiWithImage(prompt, base64Image, mediaType) {
   return data.candidates[0].content.parts[0].text;
 }
 
-// Middleware
+// CORS - YANGILANGAN ✅
 app.use(
   cors({
     origin: [
       "https://zioai-frontend.onrender.com",
       "http://localhost:3000",
       "http://127.0.0.1:5500",
+      "http://127.0.0.1:5501" // ← QO'SHING
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
+    credentials: true, // ← BU MUHIM
   })
 );
+
+app.options("*", cors()); // ← Preflight requests uchun
 
 app.options("*", cors());
 app.use(express.json({ limit: "50mb" }));
@@ -1171,30 +1174,41 @@ process.on("SIGINT", () => process.exit(0));
 
 
 // ============================================
-// AUDIO TO TEXT API - DEEPGRAM ✅
+// AUDIO TO TEXT API - DEEPGRAM ✅ TUZATILGAN
 // ============================================
 app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
   try {
+    console.log("📥 Audio request received");
+    console.log("Headers:", req.headers);
+    console.log("Body:", req.body);
+    console.log("File:", req.file ? "✅" : "❌");
+
     if (!req.file) {
       return res.status(400).json({ 
         error: "Audio file yuborilmadi", 
-        success: false 
+        success: false,
+        details: "Multer did not receive file"
       });
     }
 
     console.log("📥 Audio file received:", {
       size: req.file.size,
       mimetype: req.file.mimetype,
-      originalname: req.file.originalname
+      originalname: req.file.originalname,
+      buffer: req.file.buffer ? "✅" : "❌"
     });
 
     // Deepgram API Key tekshirish
     if (!process.env.DEEPGRAM_API_KEY) {
-      throw new Error("DEEPGRAM_API_KEY not found in .env file");
+      throw new Error("DEEPGRAM_API_KEY .env faylida topilmadi");
     }
+
+    console.log("🔑 Deepgram API Key:", process.env.DEEPGRAM_API_KEY ? "✅" : "❌");
 
     // Deepgram clientni yaratish
     const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
+
+    console.log("📤 Deepgram ga yuborilmoqda...");
 
     // Audio buffer ni transcribe qilish
     const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
@@ -1209,12 +1223,14 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
     );
 
     if (error) {
-      console.error("Deepgram API Error:", error);
+      console.error("❌ Deepgram API Error:", error);
       throw new Error(error.message || "Deepgram API xatosi");
     }
 
+    console.log("📄 Deepgram raw result:", JSON.stringify(result, null, 2));
+
     // Transcriptni olish
-    const transcript = result.results.channels[0].alternatives[0].transcript;
+    const transcript = result?.results?.channels?.[0]?.alternatives?.[0]?.transcript;
 
     console.log("✅ Deepgram transcript:", transcript);
 
@@ -1228,11 +1244,12 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Deepgram API xatosi:", error);
+    console.error("❌ Audio-to-text xatosi:", error);
     
     res.status(500).json({ 
       error: error.message || "Audio tahlil qilishda xatolik yuz berdi", 
-      success: false 
+      success: false,
+      stack: error.stack // ← Debugging uchun
     });
   }
 });
