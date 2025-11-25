@@ -7,8 +7,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const express = require("express");
 const path = require("path");
 const cors = require("cors");
-const multer = require('multer'); // ← FAQAT BU YERDA
-// DEEPGRAM SDK
+const multer = require('multer');
 const { createClient } = require("@deepgram/sdk");
 
 // Express app
@@ -19,10 +18,10 @@ const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
-// Multer configuration (FAQAT BIR MARTA) ← BU YERDA
+// Multer configuration
 const upload = multer({ 
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 } // 25MB max
+  limits: { fileSize: 25 * 1024 * 1024 }
 });
 
 // Gemini API call function
@@ -44,6 +43,7 @@ async function callGemini(prompt, maxTokens = 4096) {
   
   return data.candidates[0].content.parts[0].text;
 }
+
 // Gemini with image
 async function callGeminiWithImage(prompt, base64Image, mediaType) {
   const response = await fetch(GEMINI_URL, {
@@ -69,27 +69,24 @@ async function callGeminiWithImage(prompt, base64Image, mediaType) {
   return data.candidates[0].content.parts[0].text;
 }
 
-// CORS - YANGILANGAN ✅
+// CORS MIDDLEWARE
 app.use(
   cors({
     origin: [
       "https://zioai-frontend.onrender.com",
       "http://localhost:3000",
       "http://127.0.0.1:5500",
-      "http://127.0.0.1:5501" // ← QO'SHING
+      "http://127.0.0.1:5501"
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true, // ← BU MUHIM
+    credentials: true,
   })
 );
-
-app.options("*", cors()); // ← Preflight requests uchun
 
 app.options("*", cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
-app.use(express.static(__dirname));
 
 // HELPER FUNCTION - TEXT FORMATTING
 function formatAIResponse(text) {
@@ -118,7 +115,46 @@ function formatAIResponse(text) {
   return html;
 }
 
+// ============================================
+// ROOT ENDPOINT - ✅ YANGI QO'SHILDI
+// ============================================
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "🎓 ZiyoAI Backend Server ishlamoqda!",
+    version: "1.0.0",
+    endpoints: {
+      test: "/api/test",
+      homework: "/api/fix-homework",
+      grammar: "/api/check-grammar",
+      vocabulary: "/api/vocabulary",
+      motivation: "/api/motivation",
+      quiz: "/api/generate-quiz",
+      quizStats: "/api/quiz-stats",
+      studyAssistant: "/api/study-assistant",
+      audioToText: "/api/audio-to-text",
+      speakingFeedback: "/api/speaking-feedback"
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ============================================
+// TEST ENDPOINT
+// ============================================
+app.get("/api/test", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "Server ishlayapti ✅ (Gemini)",
+    hasGeminiKey: !!process.env.GEMINI_API_KEY,
+    hasDeepgramKey: !!process.env.DEEPGRAM_API_KEY,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// ============================================
 // 1. HOMEWORK FIXER API
+// ============================================
 app.post("/api/fix-homework", async (req, res) => {
   try {
     const { homework, image, type, language = "uz" } = req.body;
@@ -228,7 +264,9 @@ Advice for skill development.
   }
 });
 
+// ============================================
 // 2. GRAMMAR CHECKER
+// ============================================
 app.post("/api/check-grammar", async (req, res) => {
   try {
     const { text, language = "uz" } = req.body;
@@ -1094,84 +1132,6 @@ app.get("/api/test", (req, res) => {
   });
 });
 
-// 404 HANDLER
-app.use((req, res) => {
-  res.status(404).json({ error: "Sahifa topilmadi", path: req.path });
-});
-
-// START SERVER
-app.listen(PORT, () => {
-  console.log(`🚀 ZiyoAI Server (Gemini) ishga tushdi!`);
-  console.log(`📍 URL: http://localhost:${PORT}`);
-  console.log(`🔑 Gemini API Key: ${process.env.GEMINI_API_KEY ? "✅" : "❌"}`);
-});
-
-process.on("SIGTERM", () => process.exit(0));
-process.on("SIGINT", () => process.exit(0));
-
-
-// ============================================
-// AUDIO TO TEXT API (Gemini Speech-to-Text)
-// ============================================
-// app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
-//   try {
-//     if (!req.file) {
-//       return res.status(400).json({ 
-//         error: "Audio file yuborilmadi", 
-//         success: false 
-//       });
-//     }
-
-//     console.log("📥 Audio file received:", {
-//       size: req.file.size,
-//       mimetype: req.file.mimetype,
-//       originalname: req.file.originalname
-//     });
-
-//     // Audio ni base64 ga aylantirish
-//     const audioBase64 = req.file.buffer.toString('base64');
-
-//     // Gemini model (audio qo'llab-quvvatlaydigan)
-//     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-//     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-//     // Prompt bilan audio yuborish
-//     const prompt = `Please transcribe this audio recording accurately. Only return the transcribed text, nothing else. The audio is in English.`;
-
-//     const result = await model.generateContent([
-//       prompt,
-//       {
-//         inlineData: {
-//           mimeType: req.file.mimetype || "audio/webm",
-//           data: audioBase64
-//         }
-//       }
-//     ]);
-
-//     const response = await result.response;
-//     const transcript = response.text().trim();
-
-//     console.log("✅ Gemini transcript:", transcript);
-
-//     if (!transcript || transcript.length < 10) {
-//       throw new Error("Ovoz tanilmadi. Iltimos, aniqroq gapiring va qayta urinib ko'ring.");
-//     }
-
-//     res.json({
-//       success: true,
-//       transcript: transcript
-//     });
-
-//   } catch (error) {
-//     console.error("❌ Gemini Speech-to-Text xatosi:", error);
-    
-//     res.json({ 
-//       error: error.message || "Audio tahlil qilishda xatolik yuz berdi", 
-//       success: false 
-//     });
-//   }
-// });
-
 
 // ============================================
 // AUDIO TO TEXT API - DEEPGRAM ✅ TUZATILGAN
@@ -1442,3 +1402,39 @@ A ${examType === 'IELTS' ? 'Band 8-9' : 'C1-C2'} level sample answer for this to
     res.status(500).json({ error: error.message, success: false });
   }
 });
+
+// ============================================
+// 404 HANDLER - ✅ OXIRGA KO'CHIRILDI
+// ============================================
+app.use((req, res) => {
+  res.status(404).json({ 
+    error: "Endpoint topilmadi", 
+    path: req.path,
+    availableEndpoints: [
+      "GET /",
+      "GET /api/test",
+      "POST /api/fix-homework",
+      "POST /api/check-grammar",
+      "POST /api/vocabulary",
+      "GET /api/motivation",
+      "POST /api/generate-quiz",
+      "POST /api/quiz-stats",
+      "POST /api/study-assistant",
+      "POST /api/audio-to-text",
+      "POST /api/speaking-feedback"
+    ]
+  });
+});
+
+// ============================================
+// START SERVER
+// ============================================
+app.listen(PORT, () => {
+  console.log(`🚀 ZiyoAI Server (Gemini) ishga tushdi!`);
+  console.log(`📍 URL: http://localhost:${PORT}`);
+  console.log(`🔑 Gemini API Key: ${process.env.GEMINI_API_KEY ? "✅" : "❌"}`);
+  console.log(`🔑 Deepgram API Key: ${process.env.DEEPGRAM_API_KEY ? "✅" : "❌"}`);
+});
+
+process.on("SIGTERM", () => process.exit(0));
+process.on("SIGINT", () => process.exit(0));
