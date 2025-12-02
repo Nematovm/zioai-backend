@@ -1,14 +1,17 @@
 // ZIYOAI SERVER - GEMINI VERSION
 
-require('dotenv').config();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+require("dotenv").config();
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Common Modules
 const express = require("express");
-const path = require("path");
+// const path = require("path");
 const cors = require("cors");
-const multer = require('multer');
+const multer = require("multer");
 const { createClient } = require("@deepgram/sdk");
+const fs = require("fs").promises; // ✅ Bu qatorni qo'shing
+const pdfParse = require("pdf-parse");
+const path = require("path");
 
 // Express app
 const app = express();
@@ -19,9 +22,9 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 // Multer configuration
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 }
+  limits: { fileSize: 25 * 1024 * 1024 },
 });
 
 // Gemini API call function
@@ -31,16 +34,16 @@ async function callGemini(prompt, maxTokens = 4096) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: maxTokens }
-    })
+      generationConfig: { maxOutputTokens: maxTokens },
+    }),
   });
-  
+
   const data = await response.json();
-  
+
   if (data.error) {
     throw new Error(data.error.message);
   }
-  
+
   return data.candidates[0].content.parts[0].text;
 }
 
@@ -50,22 +53,24 @@ async function callGeminiWithImage(prompt, base64Image, mediaType) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{
-        parts: [
-          { inline_data: { mime_type: mediaType, data: base64Image } },
-          { text: prompt }
-        ]
-      }],
-      generationConfig: { maxOutputTokens: 4096 }
-    })
+      contents: [
+        {
+          parts: [
+            { inline_data: { mime_type: mediaType, data: base64Image } },
+            { text: prompt },
+          ],
+        },
+      ],
+      generationConfig: { maxOutputTokens: 4096 },
+    }),
   });
-  
+
   const data = await response.json();
-  
+
   if (data.error) {
     throw new Error(data.error.message);
   }
-  
+
   return data.candidates[0].content.parts[0].text;
 }
 
@@ -76,7 +81,7 @@ app.use(
       "https://zioai-frontend.onrender.com",
       "http://localhost:3000",
       "http://127.0.0.1:5500",
-      "http://127.0.0.1:5501"
+      "http://127.0.0.1:5501",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -94,16 +99,35 @@ function formatAIResponse(text) {
   let sectionOpen = false;
 
   html = html.replace(/\*\*(\d+)\.\s*([^*]+)\*\*/g, (match, number, title) => {
-    const icons = { 1: "🔍", 2: "✅", 3: "📐", 4: "📝", 5: "💡", 6: "📖", 7: "🚀" };
+    const icons = {
+      1: "🔍",
+      2: "✅",
+      3: "📐",
+      4: "📝",
+      5: "💡",
+      6: "📖",
+      7: "🚀",
+    };
     let close = sectionOpen ? "</div></div>" : "";
     sectionOpen = true;
-    return close + `<div class="ai-section"><div class="ai-heading"><span class="ai-icon">${icons[number] || "📌"}</span><span class="ai-number">${number}</span><span class="ai-title">${title.trim()}</span></div><div class="ai-body">`;
+    return (
+      close +
+      `<div class="ai-section"><div class="ai-heading"><span class="ai-icon">${
+        icons[number] || "📌"
+      }</span><span class="ai-number">${number}</span><span class="ai-title">${title.trim()}</span></div><div class="ai-body">`
+    );
   });
 
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="ai-bold">$1</strong>');
+  html = html.replace(
+    /\*\*([^*]+)\*\*/g,
+    '<strong class="ai-bold">$1</strong>'
+  );
   html = html.replace(/^[-•]\s+(.+)$/gm, '<div class="ai-bullet">$1</div>');
   html = html.replace(/`([^`]+)`/g, '<code class="ai-code">$1</code>');
-  html = html.replace(/(\d+\s*[\+\-\*\/]\s*\d+\s*=\s*\d+)/g, '<span class="ai-formula">$1</span>');
+  html = html.replace(
+    /(\d+\s*[\+\-\*\/]\s*\d+\s*=\s*\d+)/g,
+    '<span class="ai-formula">$1</span>'
+  );
   html = html.replace(/\n\n+/g, "<br><br>");
   html = html.replace(/\n/g, "<br>");
   html = html.replace(/^[#>\s]+/gm, "");
@@ -133,9 +157,9 @@ app.get("/", (req, res) => {
       quizStats: "/api/quiz-stats",
       studyAssistant: "/api/study-assistant",
       audioToText: "/api/audio-to-text",
-      speakingFeedback: "/api/speaking-feedback"
+      speakingFeedback: "/api/speaking-feedback",
     },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -272,7 +296,9 @@ app.post("/api/check-grammar", async (req, res) => {
     const { text, language = "uz" } = req.body;
 
     if (!text || text.trim() === "") {
-      return res.status(400).json({ error: "Text yuborilmadi", success: false });
+      return res
+        .status(400)
+        .json({ error: "Text yuborilmadi", success: false });
     }
 
     const prompts = {
@@ -338,7 +364,10 @@ Tips to avoid errors.
 ⚠️ ANSWER ONLY IN ENGLISH! 🇬🇧`,
     };
 
-    const rawResponse = await callGemini(prompts[language] || prompts["uz"], 3096);
+    const rawResponse = await callGemini(
+      prompts[language] || prompts["uz"],
+      3096
+    );
     const formattedResponse = formatAIResponse(rawResponse);
     res.json({ success: true, result: formattedResponse });
   } catch (error) {
@@ -353,7 +382,9 @@ app.post("/api/vocabulary", async (req, res) => {
     const { word, language = "uz" } = req.body;
 
     if (!word || word.trim() === "") {
-      return res.status(400).json({ error: "So'z yuborilmadi", success: false });
+      return res
+        .status(400)
+        .json({ error: "So'z yuborilmadi", success: false });
     }
 
     const prompts = {
@@ -443,7 +474,10 @@ Easy way to remember the word.
 ⚠️ Answer ONLY in English.`,
     };
 
-    const rawResponse = await callGemini(prompts[language] || prompts["uz"], 2048);
+    const rawResponse = await callGemini(
+      prompts[language] || prompts["uz"],
+      2048
+    );
     const formattedResponse = formatAIResponse(rawResponse);
     res.json({ success: true, result: formattedResponse, word: word });
   } catch (error) {
@@ -452,40 +486,186 @@ Easy way to remember the word.
   }
 });
 
+
+// 3.5. ARTICLE VOCABULARY API - ✅ YANGI (Articles tool uchun)
+app.post("/api/article-vocabulary", async (req, res) => {
+  try {
+    const { word, language = "uz" } = req.body;
+
+    if (!word || word.trim() === "") {
+      return res
+        .status(400)
+        .json({ error: "So'z yuborilmadi", success: false });
+    }
+
+    const prompts = {
+      uz: `Sen lug'at mutaxassisisisan. "${word}" so'zi haqida ANIQ va TO'G'RI ma'lumot ber.
+
+📋 FORMAT:
+
+📖 MA'NOSI:
+[Inglizcha definition - bir jumlada]
+
+🇺🇿 O'ZBEK:
+[To'liq o'zbekcha tarjima - masalan: "discussing" = "muhokama qilish, biror narsani muhokama qilish"]
+
+💬 MISOL:
+"[Inglizcha gap - "${word}" so'zi ishlatilgan]"
+
+⚠️ MUHIM:
+- MA'NOSI - faqat inglizcha
+- O'ZBEK - aniq tarjima
+- MISOL - haqiqiy gap
+- "so'zi haqida" dema
+
+NAMUNA:
+📖 MA'NOSI: To talk about something with other people
+🇺🇿 O'ZBEK: Muhokama qilish, biror narsani boshqalar bilan gaplashish
+💬 MISOL: "We were discussing the project during the meeting"`,
+
+      ru: `📋 ФОРМАТ:
+
+📖 DEFINITION:
+[English definition]
+
+🇷🇺 РУССКИЙ:
+[Русский перевод]
+
+💬 ПРИМЕР:
+"[Предложение с "${word}"]"`,
+
+      en: `📋 FORMAT:
+
+📖 DEFINITION:
+[Clear definition]
+
+🇬🇧 MEANING:
+[Explanation]
+
+💬 EXAMPLE:
+"[Sentence with "${word}"]"`
+    };
+
+    const rawResponse = await callGemini(
+      prompts[language] || prompts["uz"],
+      800
+    );
+    
+    res.json({ success: true, result: rawResponse, word: word });
+  } catch (error) {
+    console.error("❌ Article Vocabulary API xatosi:", error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+
 // 4. MOTIVATION QUOTES API
-// MOTIVATION QUOTES API
+// ============================================
+// MOTIVATION QUOTES API - TUZATILGAN ✅
+// ============================================
 app.get("/api/motivation", async (req, res) => {
   try {
     const motivationalQuotes = [
-      { quote: "The more that you read, the more things you will know. The more that you learn, the more places you'll go.", author: "Dr. Seuss" },
-      { quote: "Education is the most powerful weapon which you can use to change the world.", author: "Nelson Mandela" },
-      { quote: "A reader lives a thousand lives before he dies. The man who never reads lives only one.", author: "George R.R. Martin" },
-      { quote: "The only thing that you absolutely have to know, is the location of the library.", author: "Albert Einstein" },
-      { quote: "Education is not the filling of a pail, but the lighting of a fire.", author: "William Butler Yeats" },
-      { quote: "Live as if you were to die tomorrow. Learn as if you were to live forever.", author: "Mahatma Gandhi" },
-      { quote: "The book you don't read won't help.", author: "Jim Rohn" },
-      { quote: "Reading is to the mind what exercise is to the body.", author: "Joseph Addison" },
-      { quote: "There is no friend as loyal as a book.", author: "Ernest Hemingway" },
-      { quote: "Today a reader, tomorrow a leader.", author: "Margaret Fuller" },
-      { quote: "Books are a uniquely portable magic.", author: "Stephen King" },
-      { quote: "The man who does not read has no advantage over the man who cannot read.", author: "Mark Twain" },
-      { quote: "Knowledge is power.", author: "Francis Bacon" },
-      { quote: "An investment in knowledge pays the best interest.", author: "Benjamin Franklin" },
-      { quote: "Learning never exhausts the mind.", author: "Leonardo da Vinci" },
-      { quote: "Education is the passport to the future.", author: "Malcolm X" },
-      { quote: "Once you learn to read, you will be forever free.", author: "Frederick Douglass" },
-      { quote: "The beautiful thing about learning is that nobody can take it away from you.", author: "B.B. King" },
-      { quote: "Reading is essential for those who seek to rise above the ordinary.", author: "Jim Rohn" },
-      { quote: "A book is a dream that you hold in your hand.", author: "Neil Gaiman" },
+      {
+        quote:
+          "The more that you read, the more things you will know. The more that you learn, the more places you'll go.",
+        author: "— Dr. Seuss",
+      },
+      {
+        quote:
+          "Education is the most powerful weapon which you can use to change the world.",
+        author: "— Nelson Mandela",
+      },
+      {
+        quote:
+          "A reader lives a thousand lives before he dies. The man who never reads lives only one.",
+        author: "— George R.R. Martin",
+      },
+      {
+        quote:
+          "The only thing that you absolutely have to know, is the location of the library.",
+        author: "— Albert Einstein",
+      },
+      {
+        quote:
+          "Education is not the filling of a pail, but the lighting of a fire.",
+        author: "— William Butler Yeats",
+      },
+      {
+        quote:
+          "Live as if you were to die tomorrow. Learn as if you were to live forever.",
+        author: "— Mahatma Gandhi",
+      },
+      { quote: "The book you don't read won't help.", author: "— Jim Rohn" },
+      {
+        quote: "Reading is to the mind what exercise is to the body.",
+        author: "— Joseph Addison",
+      },
+      {
+        quote: "There is no friend as loyal as a book.",
+        author: "— Ernest Hemingway",
+      },
+      {
+        quote: "Today a reader, tomorrow a leader.",
+        author: "— Margaret Fuller",
+      },
+      {
+        quote: "Books are a uniquely portable magic.",
+        author: "— Stephen King",
+      },
+      {
+        quote:
+          "The man who does not read has no advantage over the man who cannot read.",
+        author: "— Mark Twain",
+      },
+      { quote: "Knowledge is power.", author: "— Francis Bacon" },
+      {
+        quote: "An investment in knowledge pays the best interest.",
+        author: "— Benjamin Franklin",
+      },
+      {
+        quote: "Learning never exhausts the mind.",
+        author: "— Leonardo da Vinci",
+      },
+      {
+        quote: "Education is the passport to the future.",
+        author: "— Malcolm X",
+      },
+      {
+        quote: "Once you learn to read, you will be forever free.",
+        author: "— Frederick Douglass",
+      },
+      {
+        quote:
+          "The beautiful thing about learning is that nobody can take it away from you.",
+        author: "— B.B. King",
+      },
+      {
+        quote:
+          "Reading is essential for those who seek to rise above the ordinary.",
+        author: "— Jim Rohn",
+      },
+      {
+        quote: "A book is a dream that you hold in your hand.",
+        author: "— Neil Gaiman",
+      },
     ];
 
-    const random = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
+    // ✅ Random quote tanlash
+    const random =
+      motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
+
+    // ✅ CORS headers qo'shish (agar kerak bo'lsa)
+    res.setHeader("Cache-Control", "no-cache");
 
     res.json({
       success: true,
-      quote: `"${random.quote}"`,
-      author: `— ${random.author}`,
+      quote: random.quote, // ✅ Faqat quote, qo'shtirnoqsiz
+      author: random.author, // ✅ "— Author" formatida
+      timestamp: new Date().toISOString(),
     });
+
+    console.log("✅ Motivatsiya yuborildi:", random.author);
   } catch (error) {
     console.error("❌ Motivation API xatosi:", error);
     res.status(500).json({
@@ -501,7 +681,9 @@ app.post("/api/generate-quiz", async (req, res) => {
     const { article, questionCount, difficulty, language = "uz" } = req.body;
 
     if (!article || article.trim() === "") {
-      return res.status(400).json({ error: "Matn yuborilmadi", success: false });
+      return res
+        .status(400)
+        .json({ error: "Matn yuborilmadi", success: false });
     }
 
     const difficultyNames = {
@@ -510,7 +692,9 @@ app.post("/api/generate-quiz", async (req, res) => {
       en: { easy: "easy", medium: "medium", hard: "hard" },
     };
 
-    const prompt = `Sen professional test tuzuvchisissan. Quyidagi matndan ${questionCount} ta ${difficultyNames[language]?.[difficulty] || "o'rtacha"} darajali test savollarini yarat.
+    const prompt = `Sen professional test tuzuvchisissan. Quyidagi matndan ${questionCount} ta ${
+      difficultyNames[language]?.[difficulty] || "o'rtacha"
+    } darajali test savollarini yarat.
 
 📖 MATN:
 ${article}
@@ -533,7 +717,7 @@ ${article}
 }`;
 
     let rawResponse = await callGemini(prompt, 4096);
-    
+
     rawResponse = rawResponse
       .replace(/```json\n?/g, "")
       .replace(/```\n?/g, "")
@@ -542,13 +726,22 @@ ${article}
       .trim();
 
     const quizData = JSON.parse(rawResponse);
-    
+
     const validQuestions = quizData.questions.filter(
-      (q) => q.question && Array.isArray(q.options) && q.options.length === 4 &&
-        typeof q.correctAnswer === "number" && q.correctAnswer >= 0 && q.correctAnswer < 4
+      (q) =>
+        q.question &&
+        Array.isArray(q.options) &&
+        q.options.length === 4 &&
+        typeof q.correctAnswer === "number" &&
+        q.correctAnswer >= 0 &&
+        q.correctAnswer < 4
     );
 
-    res.json({ success: true, questions: validQuestions, totalQuestions: validQuestions.length });
+    res.json({
+      success: true,
+      questions: validQuestions,
+      totalQuestions: validQuestions.length,
+    });
   } catch (error) {
     console.error("❌ Quiz API xatosi:", error);
     res.status(500).json({ error: error.message, success: false });
@@ -561,18 +754,32 @@ app.post("/api/quiz-stats", async (req, res) => {
     const { score, totalQuestions } = req.body;
     const percentage = ((score / totalQuestions) * 100).toFixed(0);
 
-    let message = "", emoji = "";
-    if (percentage >= 90) { message = "Ajoyib! 🎉"; emoji = "🏆"; }
-    else if (percentage >= 70) { message = "Yaxshi! 💪"; emoji = "⭐"; }
-    else if (percentage >= 50) { message = "Yomon emas! 📚"; emoji = "📖"; }
-    else { message = "Mashq qiling! 🎯"; emoji = "💡"; }
+    let message = "",
+      emoji = "";
+    if (percentage >= 90) {
+      message = "Ajoyib! 🎉";
+      emoji = "🏆";
+    } else if (percentage >= 70) {
+      message = "Yaxshi! 💪";
+      emoji = "⭐";
+    } else if (percentage >= 50) {
+      message = "Yomon emas! 📚";
+      emoji = "📖";
+    } else {
+      message = "Mashq qiling! 🎯";
+      emoji = "💡";
+    }
 
-    res.json({ success: true, message, emoji, percentage: parseInt(percentage) });
+    res.json({
+      success: true,
+      message,
+      emoji,
+      percentage: parseInt(percentage),
+    });
   } catch (error) {
     res.status(500).json({ error: error.message, success: false });
   }
 });
-
 
 // ============================================
 // STUDY ASSISTANT API
@@ -582,7 +789,9 @@ app.post("/api/study-assistant", async (req, res) => {
     const { mode, content, language = "uz" } = req.body;
 
     if (!content || content.trim() === "") {
-      return res.status(400).json({ error: "Content yuborilmadi", success: false });
+      return res
+        .status(400)
+        .json({ error: "Content yuborilmadi", success: false });
     }
 
     const prompts = {
@@ -653,7 +862,7 @@ Full scientific explanation.
 **5. 3 MEMORY LIFEHACKS:**
 Easy ways to remember.
 
-⚠️ Answer only in English.`
+⚠️ Answer only in English.`,
       },
 
       // 2. MAKE NOTES / SUMMARY
@@ -723,7 +932,7 @@ Questions that might appear on exams.
 **5. FLASHCARDS (10):**
 In Question → Answer format.
 
-⚠️ Answer only in English.`
+⚠️ Answer only in English.`,
       },
 
       // 3. QUIZ MAKER
@@ -793,7 +1002,7 @@ For each question:
 - ✅ Correct answer
 - 💡 Explanation
 
-⚠️ Answer only in English.`
+⚠️ Answer only in English.`,
       },
 
       // 4. LEARNING PLAN
@@ -866,7 +1075,7 @@ IN YOUR ANSWER INCLUDE:
 **GENERAL TIPS:**
 3 tips for effective studying.
 
-⚠️ Answer only in English.`
+⚠️ Answer only in English.`,
       },
 
       // 5. EXPLAIN MISTAKES
@@ -945,7 +1154,7 @@ Another example for practice.
 **6. TIP:**
 How to avoid such mistakes.
 
-⚠️ Answer only in English.`
+⚠️ Answer only in English.`,
       },
 
       // 6. FLASHCARD GENERATOR
@@ -1018,7 +1227,7 @@ IN YOUR ANSWER INCLUDE:
 **MEMORIZATION STRATEGY:**
 How to memorize these flashcards.
 
-⚠️ Answer only in English.`
+⚠️ Answer only in English.`,
       },
 
       // 7. SPEAKING/WRITING SCRIPT
@@ -1097,8 +1306,8 @@ Explanation of errors in bad example.
 **6. USEFUL PHRASES:**
 10 useful phrases for this topic.
 
-⚠️ Answer only in English.`
-      }
+⚠️ Answer only in English.`,
+      },
     };
 
     if (!prompts[mode]) {
@@ -1112,15 +1321,13 @@ Explanation of errors in bad example.
     res.json({
       success: true,
       result: formattedResponse,
-      mode: mode
+      mode: mode,
     });
-
   } catch (error) {
     console.error("❌ Study Assistant API xatosi:", error);
     res.status(500).json({ error: error.message, success: false });
   }
 });
-
 
 // TEST ENDPOINT
 app.get("/api/test", (req, res) => {
@@ -1132,11 +1339,10 @@ app.get("/api/test", (req, res) => {
   });
 });
 
-
 // ============================================
 // AUDIO TO TEXT API - DEEPGRAM ✅ TUZATILGAN
 // ============================================
-app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
+app.post("/api/audio-to-text", upload.single("audio"), async (req, res) => {
   try {
     console.log("📥 Audio request received");
     console.log("Headers:", req.headers);
@@ -1144,10 +1350,10 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
     console.log("File:", req.file ? "✅" : "❌");
 
     if (!req.file) {
-      return res.status(400).json({ 
-        error: "Audio file yuborilmadi", 
+      return res.status(400).json({
+        error: "Audio file yuborilmadi",
         success: false,
-        details: "Multer did not receive file"
+        details: "Multer did not receive file",
       });
     }
 
@@ -1155,7 +1361,7 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
       size: req.file.size,
       mimetype: req.file.mimetype,
       originalname: req.file.originalname,
-      buffer: req.file.buffer ? "✅" : "❌"
+      buffer: req.file.buffer ? "✅" : "❌",
     });
 
     // Deepgram API Key tekshirish
@@ -1163,7 +1369,10 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
       throw new Error("DEEPGRAM_API_KEY .env faylida topilmadi");
     }
 
-    console.log("🔑 Deepgram API Key:", process.env.DEEPGRAM_API_KEY ? "✅" : "❌");
+    console.log(
+      "🔑 Deepgram API Key:",
+      process.env.DEEPGRAM_API_KEY ? "✅" : "❌"
+    );
 
     // Deepgram clientni yaratish
     const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
@@ -1190,26 +1399,28 @@ app.post("/api/audio-to-text", upload.single('audio'), async (req, res) => {
     console.log("📄 Deepgram raw result:", JSON.stringify(result, null, 2));
 
     // Transcriptni olish
-    const transcript = result?.results?.channels?.[0]?.alternatives?.[0]?.transcript;
+    const transcript =
+      result?.results?.channels?.[0]?.alternatives?.[0]?.transcript;
 
     console.log("✅ Deepgram transcript:", transcript);
 
     if (!transcript || transcript.trim().length < 10) {
-      throw new Error("Ovoz tanilmadi. Iltimos, aniqroq gapiring va qayta urinib ko'ring.");
+      throw new Error(
+        "Ovoz tanilmadi. Iltimos, aniqroq gapiring va qayta urinib ko'ring."
+      );
     }
 
     res.json({
       success: true,
-      transcript: transcript
+      transcript: transcript,
     });
-
   } catch (error) {
     console.error("❌ Audio-to-text xatosi:", error);
-    
-    res.status(500).json({ 
-      error: error.message || "Audio tahlil qilishda xatolik yuz berdi", 
+
+    res.status(500).json({
+      error: error.message || "Audio tahlil qilishda xatolik yuz berdi",
       success: false,
-      stack: error.stack // ← Debugging uchun
+      stack: error.stack, // ← Debugging uchun
     });
   }
 });
@@ -1222,11 +1433,15 @@ app.post("/api/speaking-feedback", async (req, res) => {
     const { transcript, topic, examType, language = "uz" } = req.body;
 
     if (!transcript || transcript.trim() === "") {
-      return res.status(400).json({ error: "Transcript yuborilmadi", success: false });
+      return res
+        .status(400)
+        .json({ error: "Transcript yuborilmadi", success: false });
     }
 
     if (!topic || topic.trim() === "") {
-      return res.status(400).json({ error: "Topic yuborilmadi", success: false });
+      return res
+        .status(400)
+        .json({ error: "Topic yuborilmadi", success: false });
     }
 
     const prompts = {
@@ -1240,15 +1455,22 @@ ${transcript}
 JAVOBDA QUYIDAGILARNI YOZ:
 
 **1. UMUMIY BAHOLASH:**
-${examType === 'IELTS' ? 'IELTS Band Score (1-9)' : 'CEFR Ball (0-75) va Level (A1-C2)'}
+${
+  examType === "IELTS"
+    ? "IELTS Band Score (1-9)"
+    : "CEFR Ball (0-75) va Level (A1-C2)"
+}
 
 **2. BATAFSIL BALLAR:**
-${examType === 'IELTS' ? `
+${
+  examType === "IELTS"
+    ? `
 - Fluency & Coherence: X/9
 - Lexical Resource: X/9
 - Grammatical Range & Accuracy: X/9
 - Pronunciation: X/9
-- OVERALL BAND: X/9` : `
+- OVERALL BAND: X/9`
+    : `
 - Fluency (Ravonlik): X/15
 - Vocabulary (Lug'at): X/15
 - Grammar (Grammatika): X/15
@@ -1261,7 +1483,8 @@ ${examType === 'IELTS' ? `
 • 0-37 ball = A1-A2 (Boshlang'ich)
 • 38-50 ball = B1 (O'rta)
 • 51-64 ball = B2 (O'rta-yuqori)
-• 65-75 ball = C1 (Yuqori)`}
+• 65-75 ball = C1 (Yuqori)`
+}
 
 **3. KUCHLI TOMONLAR ✅:**
 Nima yaxshi qilgan - 3-5 ta punkt.
@@ -1273,7 +1496,9 @@ Nima ustida ishlash kerak - 3-5 ta punkt.
 Grammatik va leksik xatolar ro'yxati va to'g'ri varianti.
 
 **6. SAMPLE ANSWER 📝:**
-Shu topic uchun ${examType === 'IELTS' ? 'Band 8-9' : 'C1-C2'} darajadagi namuna javob.
+Shu topic uchun ${
+        examType === "IELTS" ? "Band 8-9" : "C1-C2"
+      } darajadagi namuna javob.
 
 **7. FOYDALI IBORALAR 💡:**
 Shu topic uchun 10 ta foydali ibora.
@@ -1296,22 +1521,30 @@ ${transcript}
 В ОТВЕТЕ УКАЖИ:
 
 **1. ОБЩАЯ ОЦЕНКА:**
-${examType === 'IELTS' ? 'IELTS Band Score (1-9)' : 'CEFR Балл (0-75) и Уровень (A1-C2)'}
+${
+  examType === "IELTS"
+    ? "IELTS Band Score (1-9)"
+    : "CEFR Балл (0-75) и Уровень (A1-C2)"
+}
 
 **2. ДЕТАЛЬНЫЕ БАЛЛЫ:**
-${examType === 'IELTS' ? `
+${
+  examType === "IELTS"
+    ? `
 - Fluency & Coherence: X/9
 - Lexical Resource: X/9
 - Grammatical Range & Accuracy: X/9
 - Pronunciation: X/9
-- OVERALL BAND: X/9` : `
+- OVERALL BAND: X/9`
+    : `
 - Fluency (Беглость): X/15
 - Vocabulary (Словарный запас): X/15
 - Grammar (Грамматика): X/15
 - Pronunciation (Произношение): X/15
 - Content (Содержание): X/15
 - ОБЩИЙ БАЛЛ: X/75
-- УРОВЕНЬ: A1/A2/B1/B2/C1/C2`}
+- УРОВЕНЬ: A1/A2/B1/B2/C1/C2`
+}
 
 **3. СИЛЬНЫЕ СТОРОНЫ ✅:**
 Что хорошо - 3-5 пунктов.
@@ -1323,7 +1556,9 @@ ${examType === 'IELTS' ? `
 Список грамматических и лексических ошибок с правильными вариантами.
 
 **6. SAMPLE ANSWER 📝:**
-Образец ответа уровня ${examType === 'IELTS' ? 'Band 8-9' : 'C1-C2'} для этой темы.
+Образец ответа уровня ${
+        examType === "IELTS" ? "Band 8-9" : "C1-C2"
+      } для этой темы.
 
 **7. ПОЛЕЗНЫЕ ФРАЗЫ 💡:**
 10 полезных фраз для этой темы.
@@ -1346,22 +1581,30 @@ ${transcript}
 IN YOUR ANSWER INCLUDE:
 
 **1. OVERALL ASSESSMENT:**
-${examType === 'IELTS' ? 'IELTS Band Score (1-9)' : 'CEFR Score (0-75) and Level (A1-C2)'}
+${
+  examType === "IELTS"
+    ? "IELTS Band Score (1-9)"
+    : "CEFR Score (0-75) and Level (A1-C2)"
+}
 
 **2. DETAILED SCORES:**
-${examType === 'IELTS' ? `
+${
+  examType === "IELTS"
+    ? `
 - Fluency & Coherence: X/9
 - Lexical Resource: X/9
 - Grammatical Range & Accuracy: X/9
 - Pronunciation: X/9
-- OVERALL BAND: X/9` : `
+- OVERALL BAND: X/9`
+    : `
 - Fluency: X/15
 - Vocabulary: X/15
 - Grammar: X/15
 - Pronunciation: X/15
 - Content: X/15
 - TOTAL SCORE: X/75
-- LEVEL: A1/A2/B1/B2/C1/C2`}
+- LEVEL: A1/A2/B1/B2/C1/C2`
+}
 
 **3. STRENGTHS ✅:**
 What was done well - 3-5 points.
@@ -1373,7 +1616,9 @@ What needs work - 3-5 points.
 List of grammatical and lexical errors with corrections.
 
 **6. SAMPLE ANSWER 📝:**
-A ${examType === 'IELTS' ? 'Band 8-9' : 'C1-C2'} level sample answer for this topic.
+A ${
+        examType === "IELTS" ? "Band 8-9" : "C1-C2"
+      } level sample answer for this topic.
 
 **7. USEFUL PHRASES 💡:**
 10 useful phrases for this topic.
@@ -1384,7 +1629,7 @@ A ${examType === 'IELTS' ? 'Band 8-9' : 'C1-C2'} level sample answer for this to
 - Stop doing: ...
 - Practice by: ...
 
-⚠️ Answer only in English!`
+⚠️ Answer only in English!`,
     };
 
     const selectedPrompt = prompts[language] || prompts["uz"];
@@ -1394,21 +1639,481 @@ A ${examType === 'IELTS' ? 'Band 8-9' : 'C1-C2'} level sample answer for this to
     res.json({
       success: true,
       result: formattedResponse,
-      examType: examType
+      examType: examType,
     });
-
   } catch (error) {
     console.error("❌ Speaking Feedback API xatosi:", error);
     res.status(500).json({ error: error.message, success: false });
   }
 });
 
+// Articles papkasi path
+const ARTICLES_DIR = path.join(__dirname, "articles");
+
+// ============================================
+// LOAD PDF ARTICLES - IMPROVED ✅
+// ============================================
+async function loadArticlesFromPDF() {
+  try {
+    await fs.access(ARTICLES_DIR);
+    const files = await fs.readdir(ARTICLES_DIR);
+    const pdfFiles = files.filter((file) => file.endsWith(".pdf"));
+
+    console.log(`📚 Found ${pdfFiles.length} PDF files in: ${ARTICLES_DIR}`);
+
+    const articles = [];
+
+    for (const file of pdfFiles) {
+      try {
+        const filePath = path.join(ARTICLES_DIR, file);
+        const dataBuffer = await fs.readFile(filePath);
+        const pdfData = await pdfParse(dataBuffer);
+
+        const rawContent = pdfData.text;
+        const cleanedContent = cleanContent(rawContent);
+
+        // Extract vocabulary using AI
+        const vocabulary = await extractAdvancedVocabulary(cleanedContent);
+
+        const article = {
+          id: file.replace(".pdf", "").toLowerCase().replace(/\s+/g, "-"),
+          title: extractTitle(file, cleanedContent), // ✅ Fixed
+          level: detectLevel(cleanedContent),
+          readTime: calculateReadTime(cleanedContent),
+          category: detectCategory(file, cleanedContent),
+          description: extractDescription(cleanedContent),
+          content: cleanedContent,
+          vocabulary: vocabulary, // ✅ C1/C2 words
+        };
+
+        articles.push(article);
+        console.log(
+          `✅ Loaded: ${article.title} (${vocabulary.length} vocab words)`
+        );
+      } catch (error) {
+        console.error(`❌ Error loading ${file}:`, error.message);
+      }
+    }
+
+    return articles;
+  } catch (error) {
+    console.error("❌ Articles directory not found:", ARTICLES_DIR);
+    return [];
+  }
+}
+
+// ============================================
+// IMPROVED TITLE EXTRACTION - IELTS ZONE NI OLIB TASHLASH ✅
+// ============================================
+function extractTitle(filename, content) {
+  // Clean content first
+  let cleanedContent = content
+    .replace(/IELTS\s+ZONE\s*#?\s*\w+/gi, "") // Remove IELTS ZONE
+    .replace(/@\w+/g, "") // Remove usernames
+    .replace(/\d{2,3}-\d{2,3}-\d{2,3}-\d{2,3}/g, "") // Remove phone numbers
+    .trim();
+
+  // Get first meaningful line as title
+  const lines = cleanedContent
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 10 && l.length < 100); // Reasonable title length
+
+  if (lines.length > 0) {
+    return lines[0];
+  }
+
+  // Fallback: use filename
+  return filename
+    .replace(".pdf", "")
+    .replace(/-/g, " ")
+    .replace(/\d+/g, "")
+    .trim();
+}
+
+function detectLevel(content) {
+  const wordCount = content.split(/\s+/).length;
+  const avgWordLength = content.replace(/\s+/g, "").length / wordCount;
+
+  if (avgWordLength < 4.5) return "A1";
+  if (avgWordLength < 5) return "A2";
+  if (avgWordLength < 5.5) return "B1";
+  if (avgWordLength < 6) return "B2";
+  if (avgWordLength < 6.5) return "C1";
+  return "C2";
+}
+
+function calculateReadTime(content) {
+  const wordCount = content.split(/\s+/).length;
+  const minutes = Math.ceil(wordCount / 200);
+  return `${minutes} min`;
+}
+
+function detectCategory(filename, content) {
+  const categories = {
+    technology: /tech|ai|computer|internet|digital/i,
+    science: /science|research|study|experiment/i,
+    environment: /environment|climate|nature|green/i,
+    sports: /sport|game|race|competition|le mans/i,
+    education: /education|learn|teach|school|university/i,
+    culture: /culture|art|music|literature/i,
+  };
+
+  const text = filename + " " + content.substring(0, 500);
+
+  for (const [category, regex] of Object.entries(categories)) {
+    if (regex.test(text)) {
+      return category.charAt(0).toUpperCase() + category.slice(1);
+    }
+  }
+
+  return "General";
+}
+
+function extractDescription(content) {
+  const cleaned = content.replace(/\n+/g, " ").trim();
+  return cleaned.substring(0, 150) + "...";
+}
+
+// ============================================
+// CLEAN CONTENT - WATERMARK REMOVAL ✅
+// ============================================
+function cleanContent(content) {
+  return (
+    content
+      // Remove all IELTS ZONE variations
+      .replace(/IELTS\s+ZONE\s*#?\s*\w+/gi, "")
+      .replace(/@\w+/g, "") // Remove @usernames
+      .replace(/\d{2,3}-\d{2,3}-\d{2,3}-\d{2,3}/g, "") // Remove phone numbers
+      .replace(/Death and Petrol/gi, "")
+      .replace(/aimforthehighest/gi, "")
+
+      // Clean extra spaces and newlines
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/\s{2,}/g, " ")
+      .replace(/\r/g, "")
+      .replace(/\f/g, "")
+      .trim()
+  );
+}
+
+
+
+function extractVocabulary(content) {
+  // Advanced C1/C2 words to look for
+  const advancedPatterns = [
+    "sophisticated",
+    "inherent",
+    "paradigm",
+    "ambiguous",
+    "convoluted",
+    "exemplify",
+    "juxtapose",
+    "ubiquitous",
+    "meticulous",
+    "pragmatic",
+    "eloquent",
+    "resilient",
+    "phenomenon",
+    "unprecedented",
+    "compelling",
+    "intricate",
+    "profound",
+    "substantial",
+    "comprehensive",
+    "inevitable",
+    "perpetual",
+    "autonomous",
+    "cultivate",
+    "endeavor",
+    "enhance",
+    "facilitate",
+    "implement",
+    "advocate",
+    "allocate",
+    "compensate",
+  ];
+
+  const words = content.match(/\b[a-z]{7,}\b/gi) || [];
+  const uniqueWords = [...new Set(words.map((w) => w.toLowerCase()))];
+
+  // Filter advanced words
+  const filtered = uniqueWords
+    .filter((word) => {
+      return (
+        advancedPatterns.some((pattern) => word.includes(pattern)) ||
+        word.length >= 10
+      );
+    })
+    .slice(0, 20);
+
+  return filtered.map((word) => ({
+    word: word,
+    definition: `Advanced academic vocabulary word`,
+    translation_uz: `${word} (murakkab akademik so'z)`,
+    translation_ru: `${word} (сложное академическое слово)`,
+    example: `This word is commonly used in academic contexts.`,
+  }));
+}
+
+// ============================================
+// ADVANCED VOCABULARY EXTRACTION - C1/C2 LEVEL ✅
+// ============================================
+async function extractAdvancedVocabulary(content) {
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+  const prompt = `Extract 15-20 ADVANCED vocabulary words (C1-C2 level) from this text.
+Focus on:
+- Academic words
+- Sophisticated vocabulary
+- Complex phrases
+- Technical terms
+- Literary language
+
+IMPORTANT: Return ONLY valid JSON, no markdown, no backticks.
+
+Format:
+{
+  "vocabulary": [
+    {
+      "word": "sophisticated",
+      "definition": "Having, revealing, or involving a great deal of worldly experience and knowledge",
+      "translation_uz": "murakkab, yuqori darajadagi",
+      "translation_ru": "сложный, изощренный",
+      "example": "She has sophisticated tastes in literature"
+    }
+  ]
+}
+
+Text:
+${content.substring(0, 3000)}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
+
+    // Clean response
+    let cleanJson = response
+      .replace(/```json\n?/g, "")
+      .replace(/```\n?/g, "")
+      .replace(/^[^{]*/, "")
+      .replace(/[^}]*$/, "")
+      .trim();
+
+    const data = JSON.parse(cleanJson);
+    return data.vocabulary || [];
+  } catch (error) {
+    console.error("❌ Gemini vocabulary extraction error:", error);
+    // Fallback: manual extraction
+    return extractVocabularyManually(content);
+  }
+}
+
+// ============================================
+// MANUAL VOCABULARY EXTRACTION (FALLBACK)
+// ============================================
+function extractVocabularyManually(content) {
+  // C1/C2 level words (common academic/advanced words)
+  const advancedWords = [
+    "sophisticated",
+    "inherent",
+    "paradigm",
+    "ambiguous",
+    "convoluted",
+    "exemplify",
+    "juxtapose",
+    "ubiquitous",
+    "meticulous",
+    "pragmatic",
+    "eloquent",
+    "resilient",
+    "phenomenon",
+    "unprecedented",
+    "compelling",
+    "intricate",
+    "profound",
+    "substantial",
+    "comprehensive",
+    "inevitable",
+  ];
+
+  const words = content.match(/\b[a-z]{8,}\b/gi) || [];
+  const uniqueWords = [...new Set(words.map((w) => w.toLowerCase()))];
+
+  // Filter only advanced words
+  const filtered = uniqueWords
+    .filter((word) => {
+      return (
+        advancedWords.some((adv) => word.includes(adv)) || word.length >= 10
+      );
+    })
+    .slice(0, 20);
+
+  return filtered.map((word) => ({
+    word: word,
+    definition: `Advanced academic word`,
+    translation_uz: `${word} (murakkab so'z)`,
+    translation_ru: `${word} (сложное слово)`,
+    example: `This word appears in academic contexts.`,
+  }));
+}
+// GET ALL ARTICLES
+app.get("/api/articles", async (req, res) => {
+  try {
+    console.log("📚 GET /api/articles - Loading PDFs...");
+    const articles = await loadArticlesFromPDF();
+
+    res.json({
+      success: true,
+      articles: articles,
+      count: articles.length,
+    });
+
+    console.log(`✅ Sent ${articles.length} articles`);
+  } catch (error) {
+    console.error("❌ Get articles error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to load articles: " + error.message,
+    });
+  }
+});
+
+// ============================================
+// ARTICLE SUMMARY API - ✅ FIXED
+// ============================================
+app.post('/api/article-summary', async (req, res) => {
+  try {
+    console.log('📥 Article summary request received');
+    console.log('Headers:', req.headers);
+    console.log('Body keys:', Object.keys(req.body));
+    
+    const { article, userSummary, language, articleTitle } = req.body;
+
+    // ✅ Validation
+    if (!article || !userSummary) {
+      console.error('❌ Missing required fields');
+      return res.status(400).json({
+        success: false,
+        error: 'Article and summary are required'
+      });
+    }
+
+    if (userSummary.trim().length < 50) {
+      return res.status(400).json({
+        success: false,
+        error: 'Summary should be at least 50 characters long'
+      });
+    }
+
+    console.log('✅ Data validated:', {
+      articleTitle,
+      articleLength: article.length,
+      summaryLength: userSummary.length,
+      language
+    });
+
+    const languageInstructions = {
+      'uz': "O'zbek tilida javob bering",
+      'ru': "Ответьте на русском языке",
+      'en': "Respond in English"
+    };
+
+    const prompt = `You are an expert English teacher evaluating a student's article summary.
+
+Original Article Title: "${articleTitle || 'Untitled Article'}"
+
+Original Article (first 2000 chars):
+${article.substring(0, 2000)}
+
+Student's Summary:
+${userSummary}
+
+Provide detailed feedback in ${languageInstructions[language] || languageInstructions['uz']}.
+
+**IMPORTANT: Format your response EXACTLY like this:**
+
+**SCORE: X/100**
+
+**1. STRENGTHS ✅:**
+- Point 1
+- Point 2
+- Point 3
+
+**2. KEY POINTS MISSED ⚠️:**
+- Missing point 1
+- Missing point 2
+
+**3. GRAMMAR & VOCABULARY 📝:**
+- Grammar feedback
+- Vocabulary suggestions
+
+**4. SUGGESTIONS 💡:**
+- Improvement tip 1
+- Improvement tip 2
+
+Score criteria:
+- 90-100: Excellent summary with all key points
+- 80-89: Very good summary, minor points missed
+- 70-79: Good summary, some key points missing
+- 60-69: Satisfactory, needs more detail
+- Below 60: Needs significant improvement`;
+
+    console.log('🤖 Calling Gemini API...');
+    
+    const result = await callGemini(prompt, 2000);
+    
+    console.log('✅ Gemini response received:', result.substring(0, 100) + '...');
+    
+    // ✅ Extract score with multiple regex patterns
+    let score = 75; // Default score
+    
+    const scorePatterns = [
+      /SCORE[:\s]*(\d+)/i,
+      /Ball[:\s]*(\d+)/i,
+      /Оценка[:\s]*(\d+)/i,
+      /(\d+)\/100/,
+      /Score[:\s]*(\d+)/i
+    ];
+    
+    for (const pattern of scorePatterns) {
+      const match = result.match(pattern);
+      if (match) {
+        score = parseInt(match[1]);
+        console.log(`✅ Score extracted: ${score} using pattern: ${pattern}`);
+        break;
+      }
+    }
+
+    const formattedFeedback = formatAIResponse(result);
+
+    console.log('📊 Analysis complete - Score:', score);
+
+    res.json({
+      success: true,
+      feedback: formattedFeedback,
+      score: score
+    });
+
+  } catch (error) {
+    console.error('❌ Article summary error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze summary: ' + error.message,
+      details: error.stack
+    });
+  }
+});
+
+// module.exports = { loadArticlesFromPDF };
+
 // ============================================
 // 404 HANDLER - ✅ OXIRGA KO'CHIRILDI
 // ============================================
 app.use((req, res) => {
-  res.status(404).json({ 
-    error: "Endpoint topilmadi", 
+  res.status(404).json({
+    error: "Endpoint topilmadi",
     path: req.path,
     availableEndpoints: [
       "GET /",
@@ -1417,24 +2122,48 @@ app.use((req, res) => {
       "POST /api/check-grammar",
       "POST /api/vocabulary",
       "GET /api/motivation",
+      "POST /api/article-summary",
       "POST /api/generate-quiz",
       "POST /api/quiz-stats",
       "POST /api/study-assistant",
       "POST /api/audio-to-text",
-      "POST /api/speaking-feedback"
-    ]
+      "POST /api/speaking-feedback",
+    ],
   });
 });
+
+
 
 // ============================================
 // START SERVER
 // ============================================
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 ZiyoAI Server (Gemini) ishga tushdi!`);
   console.log(`📍 URL: http://localhost:${PORT}`);
   console.log(`🔑 Gemini API Key: ${process.env.GEMINI_API_KEY ? "✅" : "❌"}`);
-  console.log(`🔑 Deepgram API Key: ${process.env.DEEPGRAM_API_KEY ? "✅" : "❌"}`);
+  console.log(
+    `🔑 Deepgram API Key: ${process.env.DEEPGRAM_API_KEY ? "✅" : "❌"}`
+  );
+
+  // ✅ PDF ARTICLES NI PRELOAD QILISH
+  console.log("\n📚 Loading PDF articles...");
+  try {
+    const articles = await loadArticlesFromPDF();
+    console.log(`✅ Successfully loaded ${articles.length} articles`);
+  } catch (error) {
+    console.error("❌ Failed to load articles:", error.message);
+  }
 });
 
-process.on("SIGTERM", () => process.exit(0));
-process.on("SIGINT", () => process.exit(0));
+// ============================================
+// TEST ENDPOINT - Summary API
+// ============================================
+app.get('/api/article-summary/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Article Summary API is working! ✅',
+    endpoint: '/api/article-summary',
+    method: 'POST',
+    requiredFields: ['article', 'userSummary', 'language', 'articleTitle']
+  });
+});
