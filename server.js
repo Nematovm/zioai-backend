@@ -487,7 +487,7 @@ Easy way to remember the word.
 });
 
 
-// 3.5. ARTICLE VOCABULARY API - ✅ YANGI (Articles tool uchun)
+// 3.5. ARTICLE VOCABULARY API - ✅ IMPROVED WITH PROPER PARSING
 app.post("/api/article-vocabulary", async (req, res) => {
   try {
     const { word, language = "uz" } = req.body;
@@ -499,62 +499,90 @@ app.post("/api/article-vocabulary", async (req, res) => {
     }
 
     const prompts = {
-      uz: `Sen lug'at mutaxassisisisan. "${word}" so'zi haqida ANIQ va TO'G'RI ma'lumot ber.
+      uz: `Sen professional lug'at mutaxassisisisan. "${word}" so'zi uchun FAQAT quyidagi formatda ma'lumot ber:
 
-📋 FORMAT:
+📖 DEFINITION: [Bir jumlada inglizcha definition]
+🇺🇿 O'ZBEK: [1-3 so'zda o'zbekcha tarjima]
+🇷🇺 РУССКИЙ: [1-3 so'zda ruscha tarjima - FAQAT KIRILL HARFLARDA]
+💬 EXAMPLE: "[To'liq inglizcha gap "${word}" so'zi bilan]"
 
-📖 MA'NOSI:
-[Inglizcha definition - bir jumlada]
-
-🇺🇿 O'ZBEK:
-[To'liq o'zbekcha tarjima - masalan: "discussing" = "muhokama qilish, biror narsani muhokama qilish"]
-
-💬 MISOL:
-"[Inglizcha gap - "${word}" so'zi ishlatilgan]"
-
-⚠️ MUHIM:
-- MA'NOSI - faqat inglizcha
-- O'ZBEK - aniq tarjima
-- MISOL - haqiqiy gap
-- "so'zi haqida" dema
+QOIDALAR:
+1. DEFINITION faqat inglizcha
+2. O'ZBEK juda qisqa (1-3 so'z)
+3. РУССКИЙ juda qisqa (1-3 so'z) va FAQAT kirill harflarda
+4. EXAMPLE to'liq gap
+5. Hech qanday qo'shimcha matn yozma
 
 NAMUNA:
-📖 MA'NOSI: To talk about something with other people
-🇺🇿 O'ZBEK: Muhokama qilish, biror narsani boshqalar bilan gaplashish
-💬 MISOL: "We were discussing the project during the meeting"`,
+📖 DEFINITION: To examine something carefully
+🇺🇿 O'ZBEK: Tekshirish
+🇷🇺 РУССКИЙ: Проверять
+💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
 
-      ru: `📋 ФОРМАТ:
+      ru: `Ты профессиональный словарный эксперт. Дай информацию о слове "${word}" СТРОГО в этом формате:
 
-📖 DEFINITION:
-[English definition]
+📖 DEFINITION: [Английское определение одним предложением]
+🇺🇿 O'ZBEK: [Узбекский перевод в 1-3 словах]
+🇷🇺 РУССКИЙ: [Русский перевод в 1-3 словах - ТОЛЬКО КИРИЛЛИЦЕЙ]
+💬 EXAMPLE: "[Полное английское предложение с "${word}"]"
 
-🇷🇺 РУССКИЙ:
-[Русский перевод]
+ПРАВИЛА:
+1. DEFINITION только на английском
+2. O'ZBEK очень кратко (1-3 слова)
+3. РУССКИЙ очень кратко (1-3 слова) и ТОЛЬКО кириллицей
+4. EXAMPLE полное предложение
+5. Никакого дополнительного текста
 
-💬 ПРИМЕР:
-"[Предложение с "${word}"]"`,
+ПРИМЕР:
+📖 DEFINITION: To examine something carefully
+🇺🇿 O'ZBEK: Tekshirish
+🇷🇺 РУССКИЙ: Проверять
+💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
 
-      en: `📋 FORMAT:
+      en: `You are a professional vocabulary expert. Provide information about the word "${word}" STRICTLY in this format:
 
-📖 DEFINITION:
-[Clear definition]
+📖 DEFINITION: [English definition in one sentence]
+🇺🇿 O'ZBEK: [Uzbek translation in 1-3 words]
+🇷🇺 РУССКИЙ: [Russian translation in 1-3 words - CYRILLIC ONLY]
+💬 EXAMPLE: "[Complete sentence using "${word}"]"
 
-🇬🇧 MEANING:
-[Explanation]
+RULES:
+1. DEFINITION in English only
+2. O'ZBEK very brief (1-3 words)
+3. РУССКИЙ very brief (1-3 words) in CYRILLIC only
+4. EXAMPLE must be a complete sentence
+5. No extra text
 
-💬 EXAMPLE:
-"[Sentence with "${word}"]"`
+SAMPLE:
+📖 DEFINITION: To examine something carefully
+🇺🇿 O'ZBEK: Tekshirish
+🇷🇺 РУССКИЙ: Проверять
+💬 EXAMPLE: "The teacher will review your homework tomorrow"`
     };
+
+    console.log(`🔍 Fetching vocabulary for word: "${word}" (${language})`);
 
     const rawResponse = await callGemini(
       prompts[language] || prompts["uz"],
       800
     );
     
-    res.json({ success: true, result: rawResponse, word: word });
+    console.log(`✅ Raw AI Response:\n${rawResponse}`);
+    
+    // ✅ CRITICAL: Return raw response - let frontend parse it
+    res.json({ 
+      success: true, 
+      result: rawResponse.trim(),
+      word: word,
+      language: language 
+    });
+    
   } catch (error) {
     console.error("❌ Article Vocabulary API xatosi:", error);
-    res.status(500).json({ error: error.message, success: false });
+    res.status(500).json({ 
+      error: error.message, 
+      success: false 
+    });
   }
 });
 
@@ -1651,53 +1679,72 @@ A ${
 const ARTICLES_DIR = path.join(__dirname, "articles");
 
 // ============================================
-// LOAD PDF ARTICLES - IMPROVED ✅
+// LOAD PDF ARTICLES - ✅ FIXED LEVELS FROM FOLDERS
 // ============================================
 async function loadArticlesFromPDF() {
   try {
+    const ARTICLES_DIR = path.join(__dirname, "articles");
     await fs.access(ARTICLES_DIR);
-    const files = await fs.readdir(ARTICLES_DIR);
-    const pdfFiles = files.filter((file) => file.endsWith(".pdf"));
-
-    console.log(`📚 Found ${pdfFiles.length} PDF files in: ${ARTICLES_DIR}`);
-
+    
+    console.log(`📚 Loading articles from: ${ARTICLES_DIR}`);
+    
     const articles = [];
-
-    for (const file of pdfFiles) {
+    
+    // ✅ LEVEL PAPKALARNI O'QISH
+    const LEVEL_FOLDERS = ['B1', 'B2', 'C1'];
+    
+    for (const levelFolder of LEVEL_FOLDERS) {
+      const levelPath = path.join(ARTICLES_DIR, levelFolder);
+      
       try {
-        const filePath = path.join(ARTICLES_DIR, file);
-        const dataBuffer = await fs.readFile(filePath);
-        const pdfData = await pdfParse(dataBuffer);
-
-        const rawContent = pdfData.text;
-        const cleanedContent = cleanContent(rawContent);
-
-        // Extract vocabulary using AI
-        const vocabulary = await extractAdvancedVocabulary(cleanedContent);
-
-        const article = {
-          id: file.replace(".pdf", "").toLowerCase().replace(/\s+/g, "-"),
-          title: extractTitle(file, cleanedContent), // ✅ Fixed
-          level: detectLevel(cleanedContent),
-          readTime: calculateReadTime(cleanedContent),
-          category: detectCategory(file, cleanedContent),
-          description: extractDescription(cleanedContent),
-          content: cleanedContent,
-          vocabulary: vocabulary, // ✅ C1/C2 words
-        };
-
-        articles.push(article);
-        console.log(
-          `✅ Loaded: ${article.title} (${vocabulary.length} vocab words)`
-        );
+        await fs.access(levelPath);
+        const files = await fs.readdir(levelPath);
+        const pdfFiles = files.filter((file) => file.endsWith(".pdf"));
+        
+        console.log(`📂 ${levelFolder} folder: ${pdfFiles.length} PDFs found`);
+        
+        for (const file of pdfFiles) {
+          try {
+            const filePath = path.join(levelPath, file);
+            const dataBuffer = await fs.readFile(filePath);
+            const pdfData = await pdfParse(dataBuffer);
+            
+            const rawContent = pdfData.text;
+            const cleanedContent = cleanContent(rawContent);
+            
+            // ✅ Extract vocabulary using AI
+            const vocabulary = await extractAdvancedVocabulary(cleanedContent);
+            
+            const article = {
+              id: file.replace(".pdf", "").toLowerCase().replace(/\s+/g, "-"),
+              title: extractTitle(file, cleanedContent),
+              level: levelFolder, // ✅ PAPKA NOMIDAN OLINADI!
+              readTime: calculateReadTime(cleanedContent),
+              category: detectCategory(file, cleanedContent),
+              description: extractDescription(cleanedContent),
+              content: cleanedContent,
+              vocabulary: vocabulary,
+              folderLevel: levelFolder // ✅ QO'SHIMCHA TEKSHIRISH UCHUN
+            };
+            
+            articles.push(article);
+            console.log(`✅ Loaded: ${article.title} (${levelFolder} - ${vocabulary.length} words)`);
+            
+          } catch (error) {
+            console.error(`❌ Error loading ${file}:`, error.message);
+          }
+        }
+        
       } catch (error) {
-        console.error(`❌ Error loading ${file}:`, error.message);
+        console.log(`⚠️ ${levelFolder} folder not found, skipping...`);
       }
     }
-
+    
+    console.log(`✅ Total articles loaded: ${articles.length}`);
     return articles;
+    
   } catch (error) {
-    console.error("❌ Articles directory not found:", ARTICLES_DIR);
+    console.error("❌ Articles directory not found:", error.message);
     return [];
   }
 }
