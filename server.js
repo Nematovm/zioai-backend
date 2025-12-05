@@ -1910,11 +1910,18 @@ async function extractAdvancedVocabulary(content) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-  const prompt = `Extract 15-20 ADVANCED vocabulary words (C1-C2 level) from this text.
+  const prompt = `Extract EXACTLY 10-15 ADVANCED vocabulary words from this text.
+
+CRITICAL RULES:
+1. Extract ONLY words that actually appear in the text
+2. Words must be C1-C2 or B2 level (sophisticated, academic, complex)
+3. Return EXACTLY the words found in the text (same spelling, same form)
+4. Maximum 15 words
+5. Each word MUST be present in the original text
+
 Focus on:
-- Academic words
-- Sophisticated vocabulary
-- Complex phrases
+- Academic words (e.g., sophisticated, paradigm, inherent)
+- Complex vocabulary (e.g., meticulous, pragmatic, ubiquitous)
 - Technical terms
 - Literary language
 
@@ -1949,12 +1956,32 @@ ${content.substring(0, 3000)}`;
       .trim();
 
     const data = JSON.parse(cleanJson);
-    return data.vocabulary || [];
+    const vocabulary = data.vocabulary || [];
+    
+    // ✅ CRITICAL FIX: Filter words that actually exist in the text
+    const filteredVocabulary = vocabulary.filter(vocab => {
+      const wordInText = new RegExp(`\\b${escapeRegex(vocab.word)}\\b`, 'gi').test(content);
+      if (!wordInText) {
+        console.log(`⚠️ Word "${vocab.word}" not found in text, removing...`);
+      }
+      return wordInText;
+    });
+    
+    console.log(`✅ Vocabulary extracted: ${filteredVocabulary.length}/${vocabulary.length} words validated`);
+    
+    // ✅ Limit to 15 words maximum
+    return filteredVocabulary.slice(0, 15);
+    
   } catch (error) {
     console.error("❌ Gemini vocabulary extraction error:", error);
     // Fallback: manual extraction
     return extractVocabularyManually(content);
   }
+}
+
+// ✅ Helper function for regex escaping (if not exists)
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // ============================================
@@ -1963,39 +1990,24 @@ ${content.substring(0, 3000)}`;
 function extractVocabularyManually(content) {
   // C1/C2 level words (common academic/advanced words)
   const advancedWords = [
-    "sophisticated",
-    "inherent",
-    "paradigm",
-    "ambiguous",
-    "convoluted",
-    "exemplify",
-    "juxtapose",
-    "ubiquitous",
-    "meticulous",
-    "pragmatic",
-    "eloquent",
-    "resilient",
-    "phenomenon",
-    "unprecedented",
-    "compelling",
-    "intricate",
-    "profound",
-    "substantial",
-    "comprehensive",
-    "inevitable",
+    "sophisticated", "inherent", "paradigm", "ambiguous", "convoluted",
+    "exemplify", "juxtapose", "ubiquitous", "meticulous", "pragmatic",
+    "eloquent", "resilient", "phenomenon", "unprecedented", "compelling",
+    "intricate", "profound", "substantial", "comprehensive", "inevitable",
+    "perpetual", "autonomous", "cultivate", "endeavor", "enhance",
+    "facilitate", "implement", "advocate", "allocate", "compensate"
   ];
 
+  // ✅ Extract all words from text (8+ letters)
   const words = content.match(/\b[a-z]{8,}\b/gi) || [];
   const uniqueWords = [...new Set(words.map((w) => w.toLowerCase()))];
 
-  // Filter only advanced words
+  // ✅ Filter only advanced words that exist in the text
   const filtered = uniqueWords
     .filter((word) => {
-      return (
-        advancedWords.some((adv) => word.includes(adv)) || word.length >= 10
-      );
+      return advancedWords.some((adv) => word.includes(adv)) || word.length >= 10;
     })
-    .slice(0, 20);
+    .slice(0, 15); // ✅ Limit to 15 words
 
   return filtered.map((word) => ({
     word: word,
