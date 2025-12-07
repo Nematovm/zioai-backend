@@ -19,7 +19,8 @@ const PORT = process.env.PORT || 3000;
 
 // Gemini API configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
 
 // Multer configuration
 const upload = multer({
@@ -177,91 +178,265 @@ app.get("/api/test", (req, res) => {
 });
 
 // ============================================
-// 1. HOMEWORK FIXER API
+// HOMEWORK FIXER API - SUBJECT DETECTOR UPGRADE ✅
 // ============================================
 app.post("/api/fix-homework", async (req, res) => {
   try {
     const { homework, image, type, language = "uz" } = req.body;
 
+    // ✅ STEP 1: DETECT SUBJECT (Fan aniqlash)
+    let detectedSubject = "general";
+    let subjectEmoji = "📚";
+    
+    if (type === "text" && homework) {
+      detectedSubject = detectSubject(homework);
+    }
+    
+    // Subject emoji mapping
+    const subjectEmojis = {
+      math: "📐",
+      physics: "⚗️",
+      chemistry: "🧪",
+      literature: "📖",
+      english: "🇬🇧",
+      history: "🏛️",
+      geography: "🌍",
+      biology: "🧬",
+      computer: "💻",
+      general: "📚"
+    };
+    
+    subjectEmoji = subjectEmojis[detectedSubject] || "📚";
+
+    // ✅ STEP 2: SUBJECT-SPECIFIC PROMPTS
+    const subjectPrompts = {
+      math: {
+        uz: `Sen professional MATEMATIKA o'qituvchisisisan.`,
+        ru: `Ты профессиональный учитель МАТЕМАТИКИ.`,
+        en: `You are a professional MATHEMATICS teacher.`
+      },
+      physics: {
+        uz: `Sen professional FIZIKA o'qituvchisisisan.`,
+        ru: `Ты профессиональный учитель ФИЗИКИ.`,
+        en: `You are a professional PHYSICS teacher.`
+      },
+      chemistry: {
+        uz: `Sen professional KIMYO o'qituvchisisisan.`,
+        ru: `Ты профессиональный учитель ХИМИИ.`,
+        en: `You are a professional CHEMISTRY teacher.`
+      },
+      literature: {
+        uz: `Sen professional ADABIYOT o'qituvchisisisan.`,
+        ru: `Ты профессиональный учитель ЛИТЕРАТУРЫ.`,
+        en: `You are a professional LITERATURE teacher.`
+      },
+      english: {
+        uz: `Sen professional INGLIZ TILI o'qituvchisisisan.`,
+        ru: `Ты профессиональный учитель АНГЛИЙСКОГО ЯЗЫКА.`,
+        en: `You are a professional ENGLISH LANGUAGE teacher.`
+      },
+      general: {
+        uz: `Sen professional o'qituvchisisisan.`,
+        ru: `Ты профессиональный учитель.`,
+        en: `You are a professional teacher.`
+      }
+    };
+
     const prompts = {
       uz: {
-        instruction: `Sen professional o'qituvchi va matematika mutaxassisisisan.`,
-        sections: `📋 JAVOBINGIZDA QUYIDAGILARNI YOZING:
+        instruction: subjectPrompts[detectedSubject]?.uz || subjectPrompts.general.uz,
+sections: `📋 JAVOBINGIZDA QUYIDAGILARNI YOZING:
 
 **1. TEKSHIRISH NATIJASI:**
-Vazifa to'g'ri yoki noto'g'ri ekanligini yoz.
+Vazifa to'g'ri yoki noto'g'ri ekanligini yoz agar xato qilgan bo'lsa aynan qayerda xato qilganini ko'rsat.
 
 **2. TO'G'RI JAVOB:**
-To'liq javobni yoz.
+❓ Savol: [Savolni takrorla]
+✅ Javob: [To'g'ri javobni yoz]
 
 **3. FORMULA/QOIDA:**
-Qaysi formula ishlatilganini yoz.
+📐 Ishlatiladigan formula: [Formula]
+💡 Qoida: [Qisqa tushuntirish]
 
 **4. QADAM-BA-QADAM YECHIM:**
-Har bir qadamni yoz.
+Bu eng muhim qism! Har bir qadamni alohida, batafsil yoz:
 
-**5. NIMA UCHUN SHUNDAY:**
-Mantiqiy tushuntirish.
+🔢 QADAM 1: [Birinchi qadam]
+📊 Natija: [Bu qadamdan keyin nima chiqqani]
+💭 Nima uchun: [Bu qadamni nima uchun shunday qilganingni tushuntir]
 
-**6. O'XSHASH MISOL:**
-Yana bir misol ber.
+🔢 QADAM 2: [Ikkinchi qadam]
+📊 Natija: [Bu qadamdan keyin nima chiqqani]
+💭 Nima uchun: [Bu qadamni nima uchun shunday qilganingni tushuntir]
 
-**7. MASLAHAT:**
-Ko'nikma rivojlantirish uchun maslahat.
+🔢 QADAM 3: [Uchinchi qadam]
+📊 Natija: [Bu qadamdan keyin nima chiqqani]
+💭 Nima uchun: [Bu qadamni nima uchun shunday qilganingni tushuntir]
+
+[Kerakli barcha qadamlarni shunday davom ettir]
+
+🎯 YAKUNIY JAVOB: [Oxirgi natija]
+
+**5. VIZUAL TUSHUNTIRISH:**
+Agar mumkin bo'lsa, diagramma yoki rasm ko'rinishida tushuntir (matn orqali):
+\`\`\`
+[Bu yerda ASCII art yoki oddiy vizual ko'rinish]
+\`\`\`
+
+**6. UMUMIY XATOLAR:**
+⚠️ Ko'p odamlar bu yerda qanday xato qilishadi:
+- Xato 1: [Tushuntirish]
+- Xato 2: [Tushuntirish]
+- Xato 3: [Tushuntirish]
+
+**7. O'XSHASH MISOL:**
+📝 Mashq uchun o'xshash misol:
+Savol: [Yangi savol]
+To'g'ri javob: [Javob]
+Qisqa yechim: [Qadam-ba-qadam qisqacha]
+
+**8. MASLAHAT:**
+🎓 Ko'nikma rivojlantirish uchun:
+- Maslahat 1
+- Maslahat 2
+- Maslahat 3
+
+**9. QAYERDA ISHLATILADI:**
+🌍 Real hayotda bu bilim qayerda kerak bo'ladi:
+- Misol 1
+- Misol 2
 
 ⚠️ JAVOBNI FAQAT O'ZBEK TILIDA YOZ! 🇺🇿`,
       },
       ru: {
-        instruction: `Ты профессиональный преподаватель и эксперт по математике.`,
+        instruction: subjectPrompts[detectedSubject]?.ru || subjectPrompts.general.ru,
         sections: `📋 В ОТВЕТЕ УКАЖИ:
+
 
 **1. РЕЗУЛЬТАТ ПРОВЕРКИ:**
 Правильное задание или нет.
 
 **2. ПРАВИЛЬНЫЙ ОТВЕТ:**
-Полный ответ.
+❓ Вопрос: [Повтори вопрос]
+✅ Ответ: [Правильный ответ]
 
 **3. ФОРМУЛА/ПРАВИЛО:**
-Какая формула использовалась.
+📐 Используемая формула: [Формула]
+💡 Правило: [Краткое объяснение]
 
 **4. ПОШАГОВОЕ РЕШЕНИЕ:**
-Каждый шаг отдельно.
+Это самая важная часть! Опиши каждый шаг отдельно, подробно:
 
-**5. ПОЧЕМУ ТАК:**
-Логическое обоснование.
+🔢 ШАГ 1: [Первый шаг]
+📊 Результат: [Что получилось после этого шага]
+💭 Почему так: [Объясни, почему сделал этот шаг]
 
-**6. ПОХОЖИЙ ПРИМЕР:**
-Еще один пример.
+🔢 ШАГ 2: [Второй шаг]
+📊 Результат: [Что получилось после этого шага]
+💭 Почему так: [Объясни, почему сделал этот шаг]
 
-**7. СОВЕТ:**
-Как развить навык.
+🔢 ШАГ 3: [Третий шаг]
+📊 Результат: [Что получилось после этого шага]
+💭 Почему так: [Объясни, почему сделал этот шаг]
+
+[Продолжай так со всеми необходимыми шагами]
+
+🎯 ИТОГОВЫЙ ОТВЕТ: [Конечный результат]
+
+**5. ВИЗУАЛЬНОЕ ОБЪЯСНЕНИЕ:**
+Если возможно, объясни в виде диаграммы или рисунка (через текст):
+\`\`\`
+[Здесь ASCII art или простое визуальное представление]
+\`\`\`
+
+**6. ЧАСТЫЕ ОШИБКИ:**
+⚠️ Какие ошибки часто делают люди:
+- Ошибка 1: [Объяснение]
+- Ошибка 2: [Объяснение]
+- Ошибка 3: [Объяснение]
+
+**7. ПОХОЖИЙ ПРИМЕР:**
+📝 Похожий пример для практики:
+Вопрос: [Новый вопрос]
+Правильный ответ: [Ответ]
+Краткое решение: [Пошагово кратко]
+
+**8. СОВЕТ:**
+🎓 Для развития навыка:
+- Совет 1
+- Совет 2
+- Совет 3
+
+**9. ГДЕ ИСПОЛЬЗУЕТСЯ:**
+🌍 Где в реальной жизни нужны эти знания:
+- Пример 1
+- Пример 2
 
 ⚠️ ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! 🇷🇺`,
       },
       en: {
-        instruction: `You are a professional teacher and math expert.`,
+        instruction: subjectPrompts[detectedSubject]?.en || subjectPrompts.general.en,
         sections: `📋 IN YOUR ANSWER INCLUDE:
+
 
 **1. CHECK RESULT:**
 Is the task correct or incorrect.
 
 **2. CORRECT ANSWER:**
-Complete answer.
+❓ Question: [Repeat the question]
+✅ Answer: [Correct answer]
 
 **3. FORMULA/RULE:**
-Which formula was used.
+📐 Formula used: [Formula]
+💡 Rule: [Brief explanation]
 
 **4. STEP-BY-STEP SOLUTION:**
-Each step separately.
+This is the most important part! Describe each step separately, in detail:
 
-**5. WHY IT'S LIKE THIS:**
-Logical reasoning.
+🔢 STEP 1: [First step]
+📊 Result: [What you get after this step]
+💭 Why: [Explain why you did this step]
 
-**6. SIMILAR EXAMPLE:**
-Another example.
+🔢 STEP 2: [Second step]
+📊 Result: [What you get after this step]
+💭 Why: [Explain why you did this step]
 
-**7. TIP:**
-Advice for skill development.
+🔢 STEP 3: [Third step]
+📊 Result: [What you get after this step]
+💭 Why: [Explain why you did this step]
+
+[Continue with all necessary steps]
+
+🎯 FINAL ANSWER: [Final result]
+
+**5. VISUAL EXPLANATION:**
+If possible, explain as a diagram or picture (through text):
+\`\`\`
+[Here ASCII art or simple visual representation]
+\`\`\`
+
+**6. COMMON MISTAKES:**
+⚠️ Common mistakes people make:
+- Mistake 1: [Explanation]
+- Mistake 2: [Explanation]
+- Mistake 3: [Explanation]
+
+**7. SIMILAR EXAMPLE:**
+📝 Similar example for practice:
+Question: [New question]
+Correct answer: [Answer]
+Brief solution: [Step-by-step briefly]
+
+**8. TIP:**
+🎓 For skill development:
+- Tip 1
+- Tip 2
+- Tip 3
+
+**9. WHERE IT'S USED:**
+🌍 Where in real life is this knowledge needed:
+- Example 1
+- Example 2
 
 ⚠️ ANSWER ONLY IN ENGLISH! 🇬🇧`,
       },
@@ -277,16 +452,95 @@ Advice for skill development.
       rawResponse = await callGeminiWithImage(prompt, base64Data, mediaType);
     } else {
       const prompt = `${selectedPrompt.instruction}\n\n📝 UY VAZIFA:\n${homework}\n\n${selectedPrompt.sections}`;
-      rawResponse = await callGemini(prompt);
+      rawResponse = await callGemini(prompt, 4096);
     }
 
-    const formattedResponse = formatAIResponse(rawResponse);
-    res.json({ success: true, correctedHomework: formattedResponse });
-  } catch (error) {
-    console.error("❌ Homework API xatosi:", error);
-    res.status(500).json({ error: error.message, success: false });
-  }
+// ✅ Clean AI response - remove "FAN: MATH" from AI output
+let cleanedResponse = rawResponse;
+
+// Remove subject line from AI response (since we show it as badge)
+cleanedResponse = cleanedResponse.replace(/\*\*1\.\s*FAN:\s*\w+\s*[^\*]+\*\*/gi, '');
+cleanedResponse = cleanedResponse.replace(/1\.\s*FAN:\s*\w+.+?(?=\*\*|$)/gi, '');
+cleanedResponse = cleanedResponse.replace(/Aniqlangan fan nomi\.?/gi, '');
+
+const formattedResponse = formatAIResponse(cleanedResponse);
+
+// ✅ Return with detected subject
+res.json({ 
+  success: true, 
+  correctedHomework: formattedResponse,
+  detectedSubject: detectedSubject,
+  subjectEmoji: subjectEmoji
 });
+
+  } catch (error) {
+  console.error("❌ Error:", error);
+  
+  // Better error message
+  let errorMsg = error.message;
+  if (errorMsg.includes('lowertext is not defined')) {
+    errorMsg = "Iltimos, to'liq vazifa matnini kiriting. Qisqa so'zlar uchun ishlamaydi.";
+  }
+  
+  showError(output, errorMsg);
+}
+});
+
+
+// ============================================
+// HELPER: DETECT SUBJECT (Fan aniqlash) ✅
+// ============================================
+function detectSubject(text) {
+  const lowerText = text.toLowerCase();
+  
+  // Matematika
+  if (/equation|solve|calculate|algebra|geometry|trigonometry|\+|\-|\*|\/|=|x\s*=|y\s*=|sin|cos|tan|integral|derivative|formula|number|математика|уравнение|решить|вычислить|формула|tenglamani|hisoblang|formulani|sonni/.test(lowerText)) {
+    return "math";
+  }
+  
+  // Fizika
+  if (/physics|force|velocity|acceleration|energy|momentum|массу|скорость|ускорение|энергия|kuch|tezlik|tezlanish|energiya|fizika/.test(lowerText)) {
+    return "physics";
+  }
+  
+  // Kimyo
+  if (/chemistry|molecule|atom|reaction|element|compound|химия|молекула|атом|реакция|molekula|atom|reaksiya|kimyo|element/.test(lowerText)) {
+    return "chemistry";
+  }
+  
+// Biologiya
+if (/biology|cell|organism|dna|gene|evolution|биология|клетка|организм|hujayra|organizm|biologiya/.test(lowerText)) {
+  return "biology";
+}
+  
+  // Adabiyot
+  if (/literature|poem|story|novel|author|литература|поэма|рассказ|роман|автор|she'r|hikoya|roman|muallif|adabiyot/.test(lowerText)) {
+    return "literature";
+  }
+  
+  // Ingliz tili
+  if (/translate|grammar|english|sentence|verb|noun|adjective|перевести|грамматика|английский|tarjima|grammatika|ingliz|gap|fe'l/.test(lowerText)) {
+    return "english";
+  }
+  
+  // Tarix
+  if (/history|historical|century|war|империя|история|век|война|tarix|asr|urush|davlat|империя/.test(lowerText)) {
+    return "history";
+  }
+  
+  // Geografiya
+  if (/geography|country|continent|ocean|mountain|география|страна|континент|океан|гора|geografiya|mamlakat|qit'a|okean|tog'/.test(lowerText)) {
+    return "geography";
+  }
+  
+  // Informatika
+  if (/program|code|algorithm|computer|software|программа|код|алгоритм|компьютер|dastur|kod|algoritm|kompyuter|informatika/.test(lowerText)) {
+    return "computer";
+  }
+  
+  
+  return "general";
+}
 
 // ============================================
 // 2. GRAMMAR CHECKER
@@ -1712,8 +1966,8 @@ async function loadArticlesFromPDF() {
             const rawContent = pdfData.text;
             const cleanedContent = cleanContent(rawContent);
             
-            // ✅ Extract vocabulary using AI
-            const vocabulary = await extractAdvancedVocabulary(cleanedContent);
+            // ✅ Extract vocabulary manually (no AI - saves quota!)
+            const vocabulary = extractVocabularyManually(cleanedContent);
             
             const article = {
               id: file.replace(".pdf", "").toLowerCase().replace(/\s+/g, "-"),
@@ -1908,7 +2162,7 @@ function extractVocabulary(content) {
 // ============================================
 async function extractAdvancedVocabulary(content) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `Extract EXACTLY 10-15 ADVANCED vocabulary words from this text.
 
