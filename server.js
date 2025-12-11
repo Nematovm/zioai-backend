@@ -19,7 +19,7 @@ const PORT = process.env.PORT || 3000;
 
 // Gemini API configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 
 // Multer configuration
@@ -46,6 +46,128 @@ async function callGemini(prompt, maxTokens = 4096) {
   }
 
   return data.candidates[0].content.parts[0].text;
+}
+
+// ============================================
+// 🆓 BEPUL API LARNI BIRLASHTIRISH
+// ============================================
+
+// ============================================
+// DEEPSEEK API (500M token bepul) ✅
+// ============================================
+async function callDeepSeek(prompt, maxTokens = 4096) {
+  if (!process.env.DEEPSEEK_API_KEY) {
+    throw new Error("DEEPSEEK_API_KEY yo'q");
+  }
+
+  const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: "deepseek-chat",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: maxTokens,
+      temperature: 0.7
+    })
+  });
+
+  const data = await response.json();
+
+  if (data.error) {
+    throw new Error(data.error.message);
+  }
+
+  return data.choices[0].message.content;
+}
+
+// ============================================
+// GROQ API (6000 req/min bepul) ⚡
+// ============================================
+const Groq = require("groq-sdk");
+
+async function callGroq(prompt, maxTokens = 4096) {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY yo'q");
+  }
+
+  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+  const chatCompletion = await groq.chat.completions.create({
+    messages: [{ role: "user", content: prompt }],
+    model: "llama-3.3-70b-versatile",
+    max_tokens: maxTokens,
+    temperature: 0.7
+  });
+
+  return chatCompletion.choices[0].message.content;
+}
+
+// ============================================
+// AQLLI 3-BOSQICHLI FALLBACK SISTEMA 🧠
+// ============================================
+async function callSmartAI(prompt, maxTokens = 4096) {
+  // 🥇 BOSQICH 1: GEMINI (eng tez, rasmlar bilan ishlaydi)
+  try {
+    console.log("🤖 [1/3] Gemini ishga tushirilmoqda...");
+    const result = await callGemini(prompt, maxTokens);
+    console.log("✅ Gemini muvaffaqiyatli!");
+    return result;
+  } catch (geminiError) {
+    console.log("⚠️ Gemini ishlamadi:", geminiError.message);
+    
+    // Agar quota tugasa, keyingisiga o'tamiz
+    if (geminiError.message.includes('quota') || geminiError.message.includes('429')) {
+      console.log("📊 Gemini quota tugadi, keyingisiga o'tilmoqda...");
+    }
+  }
+
+  // 🥈 BOSQICH 2: DEEPSEEK (500M token bepul)
+  try {
+    console.log("🤖 [2/3] DeepSeek ishga tushirilmoqda...");
+    const result = await callDeepSeek(prompt, maxTokens);
+    console.log("✅ DeepSeek muvaffaqiyatli!");
+    return result;
+  } catch (deepseekError) {
+    console.log("⚠️ DeepSeek ishlamadi:", deepseekError.message);
+  }
+
+  // 🥉 BOSQICH 3: GROQ (super tezkor, cheksiz)
+  try {
+    console.log("🤖 [3/3] Groq ishga tushirilmoqda...");
+    const result = await callGroq(prompt, maxTokens);
+    console.log("✅ Groq muvaffaqiyatli!");
+    return result;
+  } catch (groqError) {
+    console.log("❌ Groq ishlamadi:", groqError.message);
+  }
+
+  // Agar hech biri ishlamasa
+  throw new Error("⚠️ Hozirda barcha AI xizmatlari band. Iltimos, 1 daqiqadan keyin qayta urinib ko'ring.");
+}
+
+// ============================================
+// RASMLAR BILAN ISHLASH (faqat Gemini) 🖼️
+// ============================================
+async function callSmartAIWithImage(prompt, base64Image, mediaType) {
+  // Rasmlar bilan faqat Gemini ishlaydi
+  try {
+    console.log("🤖 [IMAGE] Gemini (rasmli) ishga tushirilmoqda...");
+    const result = await callGeminiWithImage(prompt, base64Image, mediaType);
+    console.log("✅ Gemini (rasmli) muvaffaqiyatli!");
+    return result;
+  } catch (error) {
+    console.error("❌ Gemini (rasmli) ishlamadi:", error.message);
+    
+    // Rasmlar bilan boshqa API ishlamaydi, shuning uchun foydalanuvchiga xabar beramiz
+    if (error.message.includes('quota')) {
+      throw new Error("⚠️ Rasmlarni tahlil qilish vaqtincha mavjud emas. Iltimos, matn formatida yuboring yoki keyinroq urinib ko'ring.");
+    }
+    
+    throw error;
+  }
 }
 
 // Gemini with image
@@ -151,7 +273,7 @@ app.get("/", (req, res) => {
     endpoints: {
       test: "/api/test",
       homework: "/api/fix-homework",
-      grammar: "/api/check-grammar",
+      grammar: "/api/check-writing",
       vocabulary: "/api/vocabulary",
       motivation: "/api/motivation",
       quiz: "/api/generate-quiz",
@@ -449,10 +571,10 @@ Brief solution: [Step-by-step briefly]
       const base64Data = image.split(",")[1];
       const mediaType = image.split(";")[0].split(":")[1];
       const prompt = `${selectedPrompt.instruction}\n\nRasmdagi uy vazifani tekshir va batafsil tushuntir.\n\n${selectedPrompt.sections}`;
-      rawResponse = await callGeminiWithImage(prompt, base64Data, mediaType);
+      rawResponse = await callSmartAIWithImage(prompt, base64Data, mediaType);
     } else {
       const prompt = `${selectedPrompt.instruction}\n\n📝 UY VAZIFA:\n${homework}\n\n${selectedPrompt.sections}`;
-      rawResponse = await callGemini(prompt, 4096);
+      rawResponse = await callSmartAI(prompt, 4096);
     }
 
 // ✅ Clean AI response - remove "FAN: MATH" from AI output
@@ -474,16 +596,23 @@ res.json({
 });
 
   } catch (error) {
-  console.error("❌ Error:", error);
-  
-  // Better error message
-  let errorMsg = error.message;
-  if (errorMsg.includes('lowertext is not defined')) {
-    errorMsg = "Iltimos, to'liq vazifa matnini kiriting. Qisqa so'zlar uchun ishlamaydi.";
+    console.error("❌ Error:", error);
+    
+    let errorMsg = error.message;
+    
+    // Gemini quota xatosini aniqroq ko'rsatish
+    if (errorMsg.includes('quota')) {
+      errorMsg = "⚠️ Gemini API limit tugagan. Iltimos, keyinroq urinib ko'ring.";
+    } else if (errorMsg.includes('lowertext is not defined')) {
+      errorMsg = "Iltimos, to'liq vazifa matnini kiriting.";
+    }
+    
+    // Foydalanuvchiga xabar yuborish
+    res.status(500).json({ 
+      success: false, 
+      error: errorMsg 
+    });
   }
-  
-  showError(output, errorMsg);
-}
 });
 
 
@@ -542,91 +671,339 @@ if (/biology|cell|organism|dna|gene|evolution|биология|клетка|ор
   return "general";
 }
 
-// ============================================
-// 2. GRAMMAR CHECKER
-// ============================================
-app.post("/api/check-grammar", async (req, res) => {
-  try {
-    const { text, language = "uz" } = req.body;
 
+// ============================================
+// WRITING CHECKER API - IELTS TASK 1/2
+// ============================================
+// ============================================
+// WRITING CHECKER API - UPDATED WITH IMAGE & TOPIC ✅
+// ============================================
+app.post("/api/check-writing", async (req, res) => {
+  try {
+    const { text, taskType, language = "uz", topic, image } = req.body;
+
+    // ✅ VALIDATION 1: Text check
     if (!text || text.trim() === "") {
-      return res
-        .status(400)
-        .json({ error: "Text yuborilmadi", success: false });
+      return res.status(400).json({ 
+        error: "Text yuborilmadi", 
+        success: false 
+      });
     }
 
+    // ✅ VALIDATION 2: Topic check (MAJBURIY)
+    if (!topic || topic.trim() === "") {
+      return res.status(400).json({ 
+        error: "Topic is required / Topic kiriting", 
+        success: false 
+      });
+    }
+
+    // ✅ VALIDATION 3: Word count
+    const wordCount = text.trim().split(/\s+/).length;
+
+    if (wordCount < 150) {
+      return res.status(400).json({
+        error: `Minimum 150 so'z kerak (hozirda ${wordCount} so'z)`,
+        success: false
+      });
+    }
+
+    console.log('📝 Writing Check Request:', {
+      taskType,
+      wordCount,
+      language,
+      hasTopic: !!topic,
+      hasImage: !!image
+    });
+
     const prompts = {
-      uz: `Sen professional grammatika mutaxassisisisan.
+      uz: `Sen professional IELTS Writing examiner san. Quyidagi ${taskType} javobini batafsil baholab ber.
 
-MATN:
+📝 TOPIC/SAVOL:
+${topic}
+
+${image ? '📊 CHART/DIAGRAM: [Student uploaded a chart/diagram image]\n' : ''}
+
+🎤 STUDENT'S ANSWER:
 ${text}
 
-JAVOBNI SHUNDAY BER:
+📊 WORD COUNT: ${wordCount}
 
-**1. XATOLAR:**
-Topilgan xatolarni sanab o't.
+⚠️ MUHIM: Javob topicga mos keladimi tekshir! Agar topic boshqa, answer boshqa bo'lsa, ball tushadi!
 
-**2. TUZATILGAN MATN:**
-To'liq tuzatilgan matnni yoz.
+JAVOBNI QUYIDAGI FORMATDA BER:
 
-**3. TUSHUNTIRISHLAR:**
-Har bir xatoni nima uchun tuzatganingni tushuntir.
+**1. TOPIC RELEVANCE CHECK ✅:**
+Javob topicga mos keladimi? (Ha/Yo'q)
+Agar yo'q bo'lsa, ball -2 band yoki kamroq bo'lishi kerak.
 
-**4. MASLAHATLAR:**
-Kelajakda xatolardan qochish uchun maslahat ber.
+**2. OVERALL BAND SCORE:**
+Band X.X/9.0 (aniq ball)
 
-⚠️ JAVOBNI FAQAT O'ZBEK TILIDA BER! 🇺🇿`,
-      ru: `Ты профессиональный эксперт по грамматике.
+**3. DETAILED SCORES:**
+✅ Task Achievement: X/9
+📝 Coherence & Cohesion: X/9
+📚 Lexical Resource: X/9
+✏️ Grammatical Range & Accuracy: X/9
 
-ТЕКСТ:
+**4. VOCABULARY ANALYSIS:**
+🎯 Level: (A1/A2/B1/B2/C1/C2)
+📖 Strong Words: [5 ta eng yaxshi so'z, vergul bilan ajratilgan]
+⚠️ Repetitive: [ko'p takrorlangan 3-5 ta so'z: word(x soni)]
+💡 Synonyms: [faqat takrorlangan so'zlar uchun qisqacha sinonimlar]
+
+**5. GRAMMAR MISTAKES:**
+❌ Total Errors: X ta
+
+[Faqat eng muhim 5-7 ta xatoni ko'rsat, qisqa format:]
+**#1:** "noto'g'ri gap" → "to'g'ri variant" (Rule: ...)
+
+**6. TASK RESPONSE:**
+(${taskType === 'Task 2' ? '250+ words, opinion/discussion' : '150+ words, graph/chart description'})
+- Savolga to'liq javob berilganmi? Ha/Yo'q ✓/✗
+- Fikrlar aniq va mantiqiymi? Ha/Yo'q ✓/✗
+- Misollar etarlicha bormi? Ha/Yo'q ✓/✗
+${taskType === 'Task 1' ? '- Chartdagi asosiy ma\'lumotlar to\'g\'ri tasvirlandimi? Ha/Yo\'q ✓/✗' : ''}
+
+**7. GRAMMAR PATTERNS TO IMPROVE:**
+Quyidagilarni ko'proq ishlating:
+✓ IF Conditionals (Type 1,2,3)
+✓ Passive Voice
+✓ Complex Sentences
+✓ Relative Clauses (who, which, that)
+✓ Modal Verbs (should, could, must)
+
+**8. IMPROVEMENT TIPS:**
+- [3 ta qisqa maslahat]
+
+⚠️ Javobni FAQAT O'ZBEK TILIDA BER! 🇺🇿`,
+
+      ru: `Ты профессиональный IELTS Writing examiner. Оцени следующий ${taskType} ответ подробно.
+
+📝 ТЕМА/ВОПРОС:
+${topic}
+
+${image ? '📊 ГРАФИК/ДИАГРАММА: [Студент загрузил изображение графика/диаграммы]\n' : ''}
+
+🎤 ОТВЕТ СТУДЕНТА:
 ${text}
 
-ОТВЕТ ПРЕДСТАВЬ ТАК:
+📊 КОЛИЧЕСТВО СЛОВ: ${wordCount}
 
-**1. ОШИБКИ:**
-Перечисли найденные ошибки.
+⚠️ ВАЖНО: Проверь, соответствует ли ответ теме! Если тема другая, а ответ другой - балл снижается!
 
-**2. ИСПРАВЛЕННЫЙ ТЕКСТ:**
-Полностью исправленный текст.
+ОТВЕТ ПРЕДСТАВЬ В ТАКОМ ФОРМАТЕ:
 
-**3. ОБЪЯСНЕНИЯ:**
-Объясни, почему исправил каждую ошибку.
+**1. ПРОВЕРКА РЕЛЕВАНТНОСТИ ТЕМЕ ✅:**
+Соответствует ли ответ теме? (Да/Нет)
+Если нет, балл должен быть -2 band или меньше.
 
-**4. СОВЕТЫ:**
-Советы, как избегать ошибок.
+**2. ОБЩИЙ БАЛЛ:**
+Band X.X/9.0 (точный балл)
 
-⚠️ ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! 🇷🇺`,
-      en: `You are a professional grammar expert.
+**3. ДЕТАЛЬНЫЕ БАЛЛЫ:**
+✅ Task Achievement: X/9
+📝 Coherence & Cohesion: X/9
+📚 Lexical Resource: X/9
+✏️ Grammatical Range & Accuracy: X/9
 
-TEXT:
+**4. АНАЛИЗ ЛЕКСИКИ:**
+🎯 Уровень: (A1/A2/B1/B2/C1/C2)
+📖 Сильные слова: [список 5 лучших слов через запятую]
+⚠️ Повторяющиеся: [3-5 часто повторяющихся слов с количеством]
+💡 Синонимы: [только для повторяющихся слов]
+
+**5. ГРАММАТИЧЕСКИЕ ОШИБКИ:**
+❌ Количество: X
+
+[Только 5-7 главных ошибок, короткий формат:]
+**#1:** "неправильно" → "правильно" (Правило: ...)
+
+**6. ОТВЕТ НА ЗАДАНИЕ:**
+(${taskType === 'Task 2' ? '250+ слов, мнение/обсуждение' : '150+ слов, описание графика'})
+- Полностью ответил на вопрос? Да/Нет ✓/✗
+- Идеи ясны и логичны? Да/Нет ✓/✗
+- Достаточно примеров? Да/Нет ✓/✗
+${taskType === 'Task 1' ? '- Правильно описаны данные графика? Да/Нет ✓/✗' : ''}
+
+**7. ГРАММАТИЧЕСКИЕ СТРУКТУРЫ:**
+Используй больше:
+✓ IF Conditionals (Type 1,2,3)
+✓ Passive Voice
+✓ Complex Sentences
+✓ Relative Clauses
+✓ Modal Verbs
+
+**8. СОВЕТЫ:**
+- [3 совета]
+
+⚠️ ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ! 🇷🇺`,
+
+      en: `You are a professional IELTS Writing examiner. Evaluate the following ${taskType} response in detail.
+
+📝 TOPIC/QUESTION:
+${topic}
+
+${image ? '📊 CHART/DIAGRAM: [Student uploaded a chart/diagram image]\n' : ''}
+
+🎤 STUDENT'S ANSWER:
 ${text}
 
-PROVIDE YOUR ANSWER LIKE THIS:
+📊 WORD COUNT: ${wordCount}
 
-**1. ERRORS:**
-List the errors found.
+⚠️ IMPORTANT: Check if the answer is relevant to the topic! If topic is different and answer is different, score must be reduced!
 
-**2. CORRECTED TEXT:**
-Fully corrected text.
+PROVIDE YOUR ANSWER IN THIS FORMAT:
 
-**3. EXPLANATIONS:**
-Explain why you corrected each error.
+**1. TOPIC RELEVANCE CHECK ✅:**
+Does the answer match the topic? (Yes/No)
+If no, score should be -2 bands or less.
 
-**4. TIPS:**
-Tips to avoid errors.
+**2. OVERALL BAND SCORE:**
+Band X.X/9.0 (exact score)
 
-⚠️ ANSWER ONLY IN ENGLISH! 🇬🇧`,
+**3. DETAILED SCORES:**
+✅ Task Achievement: X/9
+📝 Coherence & Cohesion: X/9
+📚 Lexical Resource: X/9
+✏️ Grammatical Range & Accuracy: X/9
+
+**4. VOCABULARY ANALYSIS:**
+🎯 Level: (A1/A2/B1/B2/C1/C2)
+📖 Strong Words: [5 best words, comma-separated]
+⚠️ Repetitive: [3-5 frequently repeated words with count]
+💡 Synonyms: [only for repeated words]
+
+**5. GRAMMAR MISTAKES:**
+❌ Total: X
+
+[Only 5-7 main errors, short format:]
+**#1:** "incorrect" → "correct" (Rule: ...)
+
+**6. TASK RESPONSE:**
+(${taskType === 'Task 2' ? '250+ words, opinion/discussion' : '150+ words, graph/chart description'})
+- Fully answered the question? Yes/No ✓/✗
+- Ideas clear and logical? Yes/No ✓/✗
+- Sufficient examples? Yes/No ✓/✗
+${taskType === 'Task 1' ? '- Chart data correctly described? Yes/No ✓/✗' : ''}
+
+**7. GRAMMAR PATTERNS:**
+Use more:
+✓ IF Conditionals (Type 1,2,3)
+✓ Passive Voice
+✓ Complex Sentences
+✓ Relative Clauses
+✓ Modal Verbs
+
+**8. TIPS:**
+- [3 tips]
+
+⚠️ ANSWER ONLY IN ENGLISH! 🇬🇧`
     };
 
-    const rawResponse = await callGemini(
-      prompts[language] || prompts["uz"],
-      3096
-    );
+    const selectedPrompt = prompts[language] || prompts["uz"];
+
+    let rawResponse;
+
+    // ✅ IF IMAGE EXISTS - Use Gemini with image
+    if (image) {
+      console.log('🖼️ Processing with image...');
+      const base64Data = image.split(",")[1];
+      const mediaType = image.split(";")[0].split(":")[1];
+      
+      rawResponse = await callSmartAIWithImage(selectedPrompt, base64Data, mediaType);
+    } else {
+      // ✅ Text only
+      console.log('📝 Processing text only...');
+      rawResponse = await callSmartAI(selectedPrompt, 8192);
+    }
+
     const formattedResponse = formatAIResponse(rawResponse);
-    res.json({ success: true, result: formattedResponse });
+
+    res.json({ 
+      success: true, 
+      result: formattedResponse,
+      wordCount: wordCount,
+      taskType: taskType,
+      topic: topic
+    });
+
   } catch (error) {
-    console.error("❌ Grammar API xatosi:", error);
-    res.status(500).json({ error: error.message, success: false });
+    console.error("❌ Writing Checker API xatosi:", error);
+    res.status(500).json({ 
+      error: error.message, 
+      success: false 
+    });
+  }
+});
+
+// ============================================
+// MODEL ANSWER API - UPDATED WITH TOPIC ✅
+// ============================================
+app.post("/api/generate-model-answer", async (req, res) => {
+  try {
+    const { topic, taskType } = req.body;
+
+    if (!topic || !taskType) {
+      return res.status(400).json({
+        error: "Topic va taskType yuborilmadi",
+        success: false
+      });
+    }
+
+    console.log('📝 Generating model answer for:', taskType);
+    console.log('📋 Topic:', topic);
+
+    const wordTarget = taskType === 'Task 2' ? '250-280' : '150-170';
+
+    const prompt = `You are a Band 9 IELTS examiner. Write a perfect ${taskType} model answer.
+
+📝 TOPIC:
+${topic}
+
+CRITICAL REQUIREMENTS:
+- Write ONLY in English (no other language)
+- Band 8-9 level vocabulary and grammar
+- Exactly ${wordTarget} words
+- ${taskType === 'Task 2' 
+  ? 'Clear thesis statement with strong arguments, relevant examples, and logical conclusion' 
+  : 'Accurate description with overview, key features, comparisons, and data'}
+- Use advanced vocabulary (sophisticated, intricate, substantial, etc.)
+- Use complex sentences with subordinate clauses
+- Use perfect grammar: conditionals, passive voice, relative clauses
+- Use excellent linking words (however, moreover, furthermore, nevertheless, consequently)
+- ${taskType === 'Task 2' 
+  ? '4 paragraphs: Introduction (paraphrase + thesis), Body 1 (argument 1 + example), Body 2 (argument 2 + example), Conclusion (summarize without new ideas)' 
+  : '3 paragraphs: Introduction (paraphrase + overview), Body (detailed description with data and comparisons), Conclusion (summarize main trend)'}
+
+Write ONLY the essay now (no extra text, no title, no labels):`;
+
+    const rawResponse = await callSmartAI(prompt, 2048);
+    
+    // Clean response
+    let modelAnswer = rawResponse
+      .replace(/```markdown/g, '')
+      .replace(/```/g, '')
+      .replace(/Model Answer:|IELTS|Band [0-9]|Task [0-9]:/gi, '')
+      .replace(/\*\*Introduction\*\*|\*\*Body\*\*|\*\*Conclusion\*\*/gi, '')
+      .trim();
+
+    const wordCount = modelAnswer.split(/\s+/).filter(w => w.length > 0).length;
+
+    console.log(`✅ Model answer generated: ${wordCount} words`);
+
+    res.json({
+      success: true,
+      modelAnswer: modelAnswer,
+      wordCount: wordCount
+    });
+
+  } catch (error) {
+    console.error("❌ Model Answer API xatosi:", error);
+    res.status(500).json({
+      error: error.message,
+      success: false
+    });
   }
 });
 
@@ -728,10 +1105,7 @@ Easy way to remember the word.
 ⚠️ Answer ONLY in English.`,
     };
 
-    const rawResponse = await callGemini(
-      prompts[language] || prompts["uz"],
-      2048
-    );
+    const rawResponse = await callSmartAI(prompts[language] || prompts["uz"], 2048);
     const formattedResponse = formatAIResponse(rawResponse);
     res.json({ success: true, result: formattedResponse, word: word });
   } catch (error) {
@@ -742,103 +1116,100 @@ Easy way to remember the word.
 
 
 // 3.5. ARTICLE VOCABULARY API - ✅ IMPROVED WITH PROPER PARSING
-app.post("/api/article-vocabulary", async (req, res) => {
-  try {
-    const { word, language = "uz" } = req.body;
+// app.post("/api/article-vocabulary", async (req, res) => {
+//   try {
+//     const { word, language = "uz" } = req.body;
 
-    if (!word || word.trim() === "") {
-      return res
-        .status(400)
-        .json({ error: "So'z yuborilmadi", success: false });
-    }
+//     if (!word || word.trim() === "") {
+//       return res
+//         .status(400)
+//         .json({ error: "So'z yuborilmadi", success: false });
+//     }
 
-    const prompts = {
-      uz: `Sen professional lug'at mutaxassisisisan. "${word}" so'zi uchun FAQAT quyidagi formatda ma'lumot ber:
+//     const prompts = {
+//       uz: `Sen professional lug'at mutaxassisisisan. "${word}" so'zi uchun FAQAT quyidagi formatda ma'lumot ber:
 
-📖 DEFINITION: [Bir jumlada inglizcha definition]
-🇺🇿 O'ZBEK: [1-3 so'zda o'zbekcha tarjima]
-🇷🇺 РУССКИЙ: [1-3 so'zda ruscha tarjima - FAQAT KIRILL HARFLARDA]
-💬 EXAMPLE: "[To'liq inglizcha gap "${word}" so'zi bilan]"
+// 📖 DEFINITION: [Bir jumlada inglizcha definition]
+// 🇺🇿 O'ZBEK: [1-3 so'zda o'zbekcha tarjima]
+// 🇷🇺 РУССКИЙ: [1-3 so'zda ruscha tarjima - FAQAT KIRILL HARFLARDA]
+// 💬 EXAMPLE: "[To'liq inglizcha gap "${word}" so'zi bilan]"
 
-QOIDALAR:
-1. DEFINITION faqat inglizcha
-2. O'ZBEK juda qisqa (1-3 so'z)
-3. РУССКИЙ juda qisqa (1-3 so'z) va FAQAT kirill harflarda
-4. EXAMPLE to'liq gap
-5. Hech qanday qo'shimcha matn yozma
+// QOIDALAR:
+// 1. DEFINITION faqat inglizcha
+// 2. O'ZBEK juda qisqa (1-3 so'z)
+// 3. РУССКИЙ juda qisqa (1-3 so'z) va FAQAT kirill harflarda
+// 4. EXAMPLE to'liq gap
+// 5. Hech qanday qo'shimcha matn yozma
 
-NAMUNA:
-📖 DEFINITION: To examine something carefully
-🇺🇿 O'ZBEK: Tekshirish
-🇷🇺 РУССКИЙ: Проверять
-💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
+// NAMUNA:
+// 📖 DEFINITION: To examine something carefully
+// 🇺🇿 O'ZBEK: Tekshirish
+// 🇷🇺 РУССКИЙ: Проверять
+// 💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
 
-      ru: `Ты профессиональный словарный эксперт. Дай информацию о слове "${word}" СТРОГО в этом формате:
+//       ru: `Ты профессиональный словарный эксперт. Дай информацию о слове "${word}" СТРОГО в этом формате:
 
-📖 DEFINITION: [Английское определение одним предложением]
-🇺🇿 O'ZBEK: [Узбекский перевод в 1-3 словах]
-🇷🇺 РУССКИЙ: [Русский перевод в 1-3 словах - ТОЛЬКО КИРИЛЛИЦЕЙ]
-💬 EXAMPLE: "[Полное английское предложение с "${word}"]"
+// 📖 DEFINITION: [Английское определение одним предложением]
+// 🇺🇿 O'ZBEK: [Узбекский перевод в 1-3 словах]
+// 🇷🇺 РУССКИЙ: [Русский перевод в 1-3 словах - ТОЛЬКО КИРИЛЛИЦЕЙ]
+// 💬 EXAMPLE: "[Полное английское предложение с "${word}"]"
 
-ПРАВИЛА:
-1. DEFINITION только на английском
-2. O'ZBEK очень кратко (1-3 слова)
-3. РУССКИЙ очень кратко (1-3 слова) и ТОЛЬКО кириллицей
-4. EXAMPLE полное предложение
-5. Никакого дополнительного текста
+// ПРАВИЛА:
+// 1. DEFINITION только на английском
+// 2. O'ZBEK очень кратко (1-3 слова)
+// 3. РУССКИЙ очень кратко (1-3 слова) и ТОЛЬКО кириллицей
+// 4. EXAMPLE полное предложение
+// 5. Никакого дополнительного текста
 
-ПРИМЕР:
-📖 DEFINITION: To examine something carefully
-🇺🇿 O'ZBEK: Tekshirish
-🇷🇺 РУССКИЙ: Проверять
-💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
+// ПРИМЕР:
+// 📖 DEFINITION: To examine something carefully
+// 🇺🇿 O'ZBEK: Tekshirish
+// 🇷🇺 РУССКИЙ: Проверять
+// 💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
 
-      en: `You are a professional vocabulary expert. Provide information about the word "${word}" STRICTLY in this format:
+//       en: `You are a professional vocabulary expert. Provide information about the word "${word}" STRICTLY in this format:
 
-📖 DEFINITION: [English definition in one sentence]
-🇺🇿 O'ZBEK: [Uzbek translation in 1-3 words]
-🇷🇺 РУССКИЙ: [Russian translation in 1-3 words - CYRILLIC ONLY]
-💬 EXAMPLE: "[Complete sentence using "${word}"]"
+// 📖 DEFINITION: [English definition in one sentence]
+// 🇺🇿 O'ZBEK: [Uzbek translation in 1-3 words]
+// 🇷🇺 РУССКИЙ: [Russian translation in 1-3 words - CYRILLIC ONLY]
+// 💬 EXAMPLE: "[Complete sentence using "${word}"]"
 
-RULES:
-1. DEFINITION in English only
-2. O'ZBEK very brief (1-3 words)
-3. РУССКИЙ very brief (1-3 words) in CYRILLIC only
-4. EXAMPLE must be a complete sentence
-5. No extra text
+// RULES:
+// 1. DEFINITION in English only
+// 2. O'ZBEK very brief (1-3 words)
+// 3. РУССКИЙ very brief (1-3 words) in CYRILLIC only
+// 4. EXAMPLE must be a complete sentence
+// 5. No extra text
 
-SAMPLE:
-📖 DEFINITION: To examine something carefully
-🇺🇿 O'ZBEK: Tekshirish
-🇷🇺 РУССКИЙ: Проверять
-💬 EXAMPLE: "The teacher will review your homework tomorrow"`
-    };
+// SAMPLE:
+// 📖 DEFINITION: To examine something carefully
+// 🇺🇿 O'ZBEK: Tekshirish
+// 🇷🇺 РУССКИЙ: Проверять
+// 💬 EXAMPLE: "The teacher will review your homework tomorrow"`
+//     };
 
-    console.log(`🔍 Fetching vocabulary for word: "${word}" (${language})`);
+//     console.log(`🔍 Fetching vocabulary for word: "${word}" (${language})`);
 
-    const rawResponse = await callGemini(
-      prompts[language] || prompts["uz"],
-      800
-    );
+//     const rawResponse = await callSmartAI(prompts[language] || prompts["uz"], 800);
     
-    console.log(`✅ Raw AI Response:\n${rawResponse}`);
+//     console.log(`✅ Raw AI Response:\n${rawResponse}`);
     
-    // ✅ CRITICAL: Return raw response - let frontend parse it
-    res.json({ 
-      success: true, 
-      result: rawResponse.trim(),
-      word: word,
-      language: language 
-    });
     
-  } catch (error) {
-    console.error("❌ Article Vocabulary API xatosi:", error);
-    res.status(500).json({ 
-      error: error.message, 
-      success: false 
-    });
-  }
-});
+//     res.json({ 
+//       success: true, 
+//       result: rawResponse.trim(),
+//       word: word,
+//       language: language 
+//     });
+    
+//   } catch (error) {
+//     console.error("❌ Article Vocabulary API xatosi:", error);
+//     res.status(500).json({ 
+//       error: error.message, 
+//       success: false 
+//     });
+//   }
+// });
 
 
 // 4. MOTIVATION QUOTES API
@@ -998,7 +1369,7 @@ ${article}
   ]
 }`;
 
-    let rawResponse = await callGemini(prompt, 4096);
+    let rawResponse = await callSmartAI(prompt, 4096);
 
     rawResponse = rawResponse
       .replace(/```json\n?/g, "")
@@ -1597,7 +1968,7 @@ Explanation of errors in bad example.
     }
 
     const selectedPrompt = prompts[mode][language] || prompts[mode]["uz"];
-    const rawResponse = await callGemini(selectedPrompt, 4096);
+    const rawResponse = await callSmartAI(selectedPrompt, 4096);
     const formattedResponse = formatAIResponse(rawResponse);
 
     res.json({
@@ -1915,7 +2286,7 @@ A ${
     };
 
     const selectedPrompt = prompts[language] || prompts["uz"];
-    const rawResponse = await callGemini(selectedPrompt, 4096);
+    const rawResponse = await callSmartAI(selectedPrompt, 4096);
     const formattedResponse = formatAIResponse(rawResponse);
 
     res.json({
@@ -1935,73 +2306,73 @@ const ARTICLES_DIR = path.join(__dirname, "articles");
 // ============================================
 // LOAD PDF ARTICLES - ✅ FIXED LEVELS FROM FOLDERS
 // ============================================
-async function loadArticlesFromPDF() {
-  try {
-    const ARTICLES_DIR = path.join(__dirname, "articles");
-    await fs.access(ARTICLES_DIR);
+// async function loadArticlesFromPDF() {
+//   try {
+//     const ARTICLES_DIR = path.join(__dirname, "articles");
+//     await fs.access(ARTICLES_DIR);
     
-    console.log(`📚 Loading articles from: ${ARTICLES_DIR}`);
+//     console.log(`📚 Loading articles from: ${ARTICLES_DIR}`);
     
-    const articles = [];
+//     const articles = [];
     
-    // ✅ LEVEL PAPKALARNI O'QISH
-    const LEVEL_FOLDERS = ['B1', 'B2', 'C1'];
+//     // ✅ LEVEL PAPKALARNI O'QISH
+//     const LEVEL_FOLDERS = ['B1', 'B2', 'C1'];
     
-    for (const levelFolder of LEVEL_FOLDERS) {
-      const levelPath = path.join(ARTICLES_DIR, levelFolder);
+//     for (const levelFolder of LEVEL_FOLDERS) {
+//       const levelPath = path.join(ARTICLES_DIR, levelFolder);
       
-      try {
-        await fs.access(levelPath);
-        const files = await fs.readdir(levelPath);
-        const pdfFiles = files.filter((file) => file.endsWith(".pdf"));
+//       try {
+//         await fs.access(levelPath);
+//         const files = await fs.readdir(levelPath);
+//         const pdfFiles = files.filter((file) => file.endsWith(".pdf"));
         
-        console.log(`📂 ${levelFolder} folder: ${pdfFiles.length} PDFs found`);
+//         console.log(`📂 ${levelFolder} folder: ${pdfFiles.length} PDFs found`);
         
-        for (const file of pdfFiles) {
-          try {
-            const filePath = path.join(levelPath, file);
-            const dataBuffer = await fs.readFile(filePath);
-            const pdfData = await pdfParse(dataBuffer);
+//         for (const file of pdfFiles) {
+//           try {
+//             const filePath = path.join(levelPath, file);
+//             const dataBuffer = await fs.readFile(filePath);
+//             const pdfData = await pdfParse(dataBuffer);
             
-            const rawContent = pdfData.text;
-            const cleanedContent = cleanContent(rawContent);
+//             const rawContent = pdfData.text;
+//             const cleanedContent = cleanContent(rawContent);
             
-            // ✅ Extract vocabulary manually (no AI - saves quota!)
-            const vocabulary = extractVocabularyManually(cleanedContent);
+//             // ✅ Extract vocabulary manually (no AI - saves quota!)
+//             const vocabulary = extractVocabularyManually(cleanedContent);
             
-            const article = {
-              id: file.replace(".pdf", "").toLowerCase().replace(/\s+/g, "-"),
-              title: extractTitle(file, cleanedContent),
-              level: levelFolder, // ✅ PAPKA NOMIDAN OLINADI!
-              readTime: calculateReadTime(cleanedContent),
-              category: detectCategory(file, cleanedContent),
-              description: extractDescription(cleanedContent),
-              content: cleanedContent,
-              vocabulary: vocabulary,
-              folderLevel: levelFolder // ✅ QO'SHIMCHA TEKSHIRISH UCHUN
-            };
+//             const article = {
+//               id: file.replace(".pdf", "").toLowerCase().replace(/\s+/g, "-"),
+//               title: extractTitle(file, cleanedContent),
+//               level: levelFolder, // ✅ PAPKA NOMIDAN OLINADI!
+//               readTime: calculateReadTime(cleanedContent),
+//               category: detectCategory(file, cleanedContent),
+//               description: extractDescription(cleanedContent),
+//               content: cleanedContent,
+//               vocabulary: vocabulary,
+//               folderLevel: levelFolder // ✅ QO'SHIMCHA TEKSHIRISH UCHUN
+//             };
             
-            articles.push(article);
-            console.log(`✅ Loaded: ${article.title} (${levelFolder} - ${vocabulary.length} words)`);
+//             articles.push(article);
+//             console.log(`✅ Loaded: ${article.title} (${levelFolder} - ${vocabulary.length} words)`);
             
-          } catch (error) {
-            console.error(`❌ Error loading ${file}:`, error.message);
-          }
-        }
+//           } catch (error) {
+//             console.error(`❌ Error loading ${file}:`, error.message);
+//           }
+//         }
         
-      } catch (error) {
-        console.log(`⚠️ ${levelFolder} folder not found, skipping...`);
-      }
-    }
+//       } catch (error) {
+//         console.log(`⚠️ ${levelFolder} folder not found, skipping...`);
+//       }
+//     }
     
-    console.log(`✅ Total articles loaded: ${articles.length}`);
-    return articles;
+//     console.log(`✅ Total articles loaded: ${articles.length}`);
+//     return articles;
     
-  } catch (error) {
-    console.error("❌ Articles directory not found:", error.message);
-    return [];
-  }
-}
+//   } catch (error) {
+//     console.error("❌ Articles directory not found:", error.message);
+//     return [];
+//   }
+// }
 
 // ============================================
 // IMPROVED TITLE EXTRACTION - IELTS ZONE NI OLIB TASHLASH ✅
@@ -2160,10 +2531,10 @@ function extractVocabulary(content) {
 // ============================================
 // ADVANCED VOCABULARY EXTRACTION - C1/C2 LEVEL ✅
 // ============================================
+// ============================================
+// ADVANCED VOCABULARY EXTRACTION - IMPROVED ✅
+// ============================================
 async function extractAdvancedVocabulary(content) {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
   const prompt = `Extract EXACTLY 10-15 ADVANCED vocabulary words from this text.
 
 CRITICAL RULES:
@@ -2198,8 +2569,10 @@ Text:
 ${content.substring(0, 3000)}`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
+    console.log('🔍 Extracting vocabulary using AI...');
+    
+    // ✅ Multi-API fallback system
+    const response = await callSmartAI(prompt, 2000);
 
     // Clean response
     let cleanJson = response
@@ -2212,7 +2585,7 @@ ${content.substring(0, 3000)}`;
     const data = JSON.parse(cleanJson);
     const vocabulary = data.vocabulary || [];
     
-    // ✅ CRITICAL FIX: Filter words that actually exist in the text
+    // Filter words that actually exist in the text
     const filteredVocabulary = vocabulary.filter(vocab => {
       const wordInText = new RegExp(`\\b${escapeRegex(vocab.word)}\\b`, 'gi').test(content);
       if (!wordInText) {
@@ -2223,20 +2596,19 @@ ${content.substring(0, 3000)}`;
     
     console.log(`✅ Vocabulary extracted: ${filteredVocabulary.length}/${vocabulary.length} words validated`);
     
-    // ✅ Limit to 15 words maximum
+    // Limit to 15 words maximum
     return filteredVocabulary.slice(0, 15);
     
   } catch (error) {
-    console.error("❌ Gemini vocabulary extraction error:", error);
+    console.error("❌ AI vocabulary extraction error:", error);
+    console.log("🔄 Falling back to manual extraction...");
+    
     // Fallback: manual extraction
     return extractVocabularyManually(content);
   }
 }
 
-// ✅ Helper function for regex escaping (if not exists)
-function escapeRegex(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+
 
 // ============================================
 // MANUAL VOCABULARY EXTRACTION (FALLBACK)
@@ -2375,7 +2747,7 @@ Score criteria:
 
     console.log('🤖 Calling Gemini API...');
     
-    const result = await callGemini(prompt, 2000);
+    const result = await callSmartAI(prompt, 2000);
     
     console.log('✅ Gemini response received:', result.substring(0, 100) + '...');
     
@@ -2432,7 +2804,7 @@ app.use((req, res) => {
       "GET /",
       "GET /api/test",
       "POST /api/fix-homework",
-      "POST /api/check-grammar",
+      "POST /api/check-writing",
       "POST /api/vocabulary",
       "GET /api/motivation",
       "POST /api/article-summary",
