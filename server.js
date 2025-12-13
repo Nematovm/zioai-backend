@@ -1116,100 +1116,100 @@ Easy way to remember the word.
 
 
 // 3.5. ARTICLE VOCABULARY API - ✅ IMPROVED WITH PROPER PARSING
-// app.post("/api/article-vocabulary", async (req, res) => {
-//   try {
-//     const { word, language = "uz" } = req.body;
+app.post("/api/article-vocabulary", async (req, res) => {
+  try {
+    const { word, language = "uz" } = req.body;
 
-//     if (!word || word.trim() === "") {
-//       return res
-//         .status(400)
-//         .json({ error: "So'z yuborilmadi", success: false });
-//     }
+    if (!word || word.trim() === "") {
+      return res
+        .status(400)
+        .json({ error: "So'z yuborilmadi", success: false });
+    }
 
-//     const prompts = {
-//       uz: `Sen professional lug'at mutaxassisisisan. "${word}" so'zi uchun FAQAT quyidagi formatda ma'lumot ber:
+    const prompts = {
+      uz: `Sen professional lug'at mutaxassisisisan. "${word}" so'zi uchun FAQAT quyidagi formatda ma'lumot ber:
 
-// 📖 DEFINITION: [Bir jumlada inglizcha definition]
-// 🇺🇿 O'ZBEK: [1-3 so'zda o'zbekcha tarjima]
-// 🇷🇺 РУССКИЙ: [1-3 so'zda ruscha tarjima - FAQAT KIRILL HARFLARDA]
-// 💬 EXAMPLE: "[To'liq inglizcha gap "${word}" so'zi bilan]"
+📖 DEFINITION: [Bir jumlada inglizcha definition]
+🇺🇿 O'ZBEK: [1-3 so'zda o'zbekcha tarjima]
+🇷🇺 РУССКИЙ: [1-3 so'zda ruscha tarjima - FAQAT KIRILL HARFLARDA]
+💬 EXAMPLE: "[To'liq inglizcha gap "${word}" so'zi bilan]"
 
-// QOIDALAR:
-// 1. DEFINITION faqat inglizcha
-// 2. O'ZBEK juda qisqa (1-3 so'z)
-// 3. РУССКИЙ juda qisqa (1-3 so'z) va FAQAT kirill harflarda
-// 4. EXAMPLE to'liq gap
-// 5. Hech qanday qo'shimcha matn yozma
+QOIDALAR:
+1. DEFINITION faqat inglizcha
+2. O'ZBEK juda qisqa (1-3 so'z)
+3. РУССКИЙ juda qisqa (1-3 so'z) va FAQAT kirill harflarda
+4. EXAMPLE to'liq gap
+5. Hech qanday qo'shimcha matn yozma
 
-// NAMUNA:
-// 📖 DEFINITION: To examine something carefully
-// 🇺🇿 O'ZBEK: Tekshirish
-// 🇷🇺 РУССКИЙ: Проверять
-// 💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
+NAMUNA:
+📖 DEFINITION: To examine something carefully
+🇺🇿 O'ZBEK: Tekshirish
+🇷🇺 РУССКИЙ: Проверять
+💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
 
-//       ru: `Ты профессиональный словарный эксперт. Дай информацию о слове "${word}" СТРОГО в этом формате:
+      ru: `Ты профессиональный словарный эксперт. Дай информацию о слове "${word}" СТРОГО в этом формате:
 
-// 📖 DEFINITION: [Английское определение одним предложением]
-// 🇺🇿 O'ZBEK: [Узбекский перевод в 1-3 словах]
-// 🇷🇺 РУССКИЙ: [Русский перевод в 1-3 словах - ТОЛЬКО КИРИЛЛИЦЕЙ]
-// 💬 EXAMPLE: "[Полное английское предложение с "${word}"]"
+📖 DEFINITION: [Английское определение одним предложением]
+🇺🇿 O'ZBEK: [Узбекский перевод в 1-3 словах]
+🇷🇺 РУССКИЙ: [Русский перевод в 1-3 словах - ТОЛЬКО КИРИЛЛИЦЕЙ]
+💬 EXAMPLE: "[Полное английское предложение с "${word}"]"
 
-// ПРАВИЛА:
-// 1. DEFINITION только на английском
-// 2. O'ZBEK очень кратко (1-3 слова)
-// 3. РУССКИЙ очень кратко (1-3 слова) и ТОЛЬКО кириллицей
-// 4. EXAMPLE полное предложение
-// 5. Никакого дополнительного текста
+ПРАВИЛА:
+1. DEFINITION только на английском
+2. O'ZBEK очень кратко (1-3 слова)
+3. РУССКИЙ очень кратко (1-3 слова) и ТОЛЬКО кириллицей
+4. EXAMPLE полное предложение
+5. Никакого дополнительного текста
 
-// ПРИМЕР:
-// 📖 DEFINITION: To examine something carefully
-// 🇺🇿 O'ZBEK: Tekshirish
-// 🇷🇺 РУССКИЙ: Проверять
-// 💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
+ПРИМЕР:
+📖 DEFINITION: To examine something carefully
+🇺🇿 O'ZBEK: Tekshirish
+🇷🇺 РУССКИЙ: Проверять
+💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
 
-//       en: `You are a professional vocabulary expert. Provide information about the word "${word}" STRICTLY in this format:
+      en: `You are a professional vocabulary expert. Provide information about the word "${word}" STRICTLY in this format:
 
-// 📖 DEFINITION: [English definition in one sentence]
-// 🇺🇿 O'ZBEK: [Uzbek translation in 1-3 words]
-// 🇷🇺 РУССКИЙ: [Russian translation in 1-3 words - CYRILLIC ONLY]
-// 💬 EXAMPLE: "[Complete sentence using "${word}"]"
+📖 DEFINITION: [English definition in one sentence]
+🇺🇿 O'ZBEK: [Uzbek translation in 1-3 words]
+🇷🇺 РУССКИЙ: [Russian translation in 1-3 words - CYRILLIC ONLY]
+💬 EXAMPLE: "[Complete sentence using "${word}"]"
 
-// RULES:
-// 1. DEFINITION in English only
-// 2. O'ZBEK very brief (1-3 words)
-// 3. РУССКИЙ very brief (1-3 words) in CYRILLIC only
-// 4. EXAMPLE must be a complete sentence
-// 5. No extra text
+RULES:
+1. DEFINITION in English only
+2. O'ZBEK very brief (1-3 words)
+3. РУССКИЙ very brief (1-3 words) in CYRILLIC only
+4. EXAMPLE must be a complete sentence
+5. No extra text
 
-// SAMPLE:
-// 📖 DEFINITION: To examine something carefully
-// 🇺🇿 O'ZBEK: Tekshirish
-// 🇷🇺 РУССКИЙ: Проверять
-// 💬 EXAMPLE: "The teacher will review your homework tomorrow"`
-//     };
+SAMPLE:
+📖 DEFINITION: To examine something carefully
+🇺🇿 O'ZBEK: Tekshirish
+🇷🇺 РУССКИЙ: Проверять
+💬 EXAMPLE: "The teacher will review your homework tomorrow"`
+    };
 
-//     console.log(`🔍 Fetching vocabulary for word: "${word}" (${language})`);
+    console.log(`🔍 Fetching vocabulary for word: "${word}" (${language})`);
 
-//     const rawResponse = await callSmartAI(prompts[language] || prompts["uz"], 800);
+    const rawResponse = await callSmartAI(prompts[language] || prompts["uz"], 800);
     
-//     console.log(`✅ Raw AI Response:\n${rawResponse}`);
+    console.log(`✅ Raw AI Response:\n${rawResponse}`);
     
     
-//     res.json({ 
-//       success: true, 
-//       result: rawResponse.trim(),
-//       word: word,
-//       language: language 
-//     });
+    res.json({ 
+      success: true, 
+      result: rawResponse.trim(),
+      word: word,
+      language: language 
+    });
     
-//   } catch (error) {
-//     console.error("❌ Article Vocabulary API xatosi:", error);
-//     res.status(500).json({ 
-//       error: error.message, 
-//       success: false 
-//     });
-//   }
-// });
+  } catch (error) {
+    console.error("❌ Article Vocabulary API xatosi:", error);
+    res.status(500).json({ 
+      error: error.message, 
+      success: false 
+    });
+  }
+});
 
 
 // 4. MOTIVATION QUOTES API
@@ -2306,73 +2306,73 @@ const ARTICLES_DIR = path.join(__dirname, "articles");
 // ============================================
 // LOAD PDF ARTICLES - ✅ FIXED LEVELS FROM FOLDERS
 // ============================================
-// async function loadArticlesFromPDF() {
-//   try {
-//     const ARTICLES_DIR = path.join(__dirname, "articles");
-//     await fs.access(ARTICLES_DIR);
+async function loadArticlesFromPDF() {
+  try {
+    const ARTICLES_DIR = path.join(__dirname, "articles");
+    await fs.access(ARTICLES_DIR);
     
-//     console.log(`📚 Loading articles from: ${ARTICLES_DIR}`);
+    console.log(`📚 Loading articles from: ${ARTICLES_DIR}`);
     
-//     const articles = [];
+    const articles = [];
     
-//     // ✅ LEVEL PAPKALARNI O'QISH
-//     const LEVEL_FOLDERS = ['B1', 'B2', 'C1'];
+    // ✅ LEVEL PAPKALARNI O'QISH
+    const LEVEL_FOLDERS = ['B1', 'B2', 'C1'];
     
-//     for (const levelFolder of LEVEL_FOLDERS) {
-//       const levelPath = path.join(ARTICLES_DIR, levelFolder);
+    for (const levelFolder of LEVEL_FOLDERS) {
+      const levelPath = path.join(ARTICLES_DIR, levelFolder);
       
-//       try {
-//         await fs.access(levelPath);
-//         const files = await fs.readdir(levelPath);
-//         const pdfFiles = files.filter((file) => file.endsWith(".pdf"));
+      try {
+        await fs.access(levelPath);
+        const files = await fs.readdir(levelPath);
+        const pdfFiles = files.filter((file) => file.endsWith(".pdf"));
         
-//         console.log(`📂 ${levelFolder} folder: ${pdfFiles.length} PDFs found`);
+        console.log(`📂 ${levelFolder} folder: ${pdfFiles.length} PDFs found`);
         
-//         for (const file of pdfFiles) {
-//           try {
-//             const filePath = path.join(levelPath, file);
-//             const dataBuffer = await fs.readFile(filePath);
-//             const pdfData = await pdfParse(dataBuffer);
+        for (const file of pdfFiles) {
+          try {
+            const filePath = path.join(levelPath, file);
+            const dataBuffer = await fs.readFile(filePath);
+            const pdfData = await pdfParse(dataBuffer);
             
-//             const rawContent = pdfData.text;
-//             const cleanedContent = cleanContent(rawContent);
+            const rawContent = pdfData.text;
+            const cleanedContent = cleanContent(rawContent);
             
-//             // ✅ Extract vocabulary manually (no AI - saves quota!)
-//             const vocabulary = extractVocabularyManually(cleanedContent);
+            // ✅ Extract vocabulary manually (no AI - saves quota!)
+            const vocabulary = extractVocabularyManually(cleanedContent);
             
-//             const article = {
-//               id: file.replace(".pdf", "").toLowerCase().replace(/\s+/g, "-"),
-//               title: extractTitle(file, cleanedContent),
-//               level: levelFolder, // ✅ PAPKA NOMIDAN OLINADI!
-//               readTime: calculateReadTime(cleanedContent),
-//               category: detectCategory(file, cleanedContent),
-//               description: extractDescription(cleanedContent),
-//               content: cleanedContent,
-//               vocabulary: vocabulary,
-//               folderLevel: levelFolder // ✅ QO'SHIMCHA TEKSHIRISH UCHUN
-//             };
+            const article = {
+              id: file.replace(".pdf", "").toLowerCase().replace(/\s+/g, "-"),
+              title: extractTitle(file, cleanedContent),
+              level: levelFolder, // ✅ PAPKA NOMIDAN OLINADI!
+              readTime: calculateReadTime(cleanedContent),
+              category: detectCategory(file, cleanedContent),
+              description: extractDescription(cleanedContent),
+              content: cleanedContent,
+              vocabulary: vocabulary,
+              folderLevel: levelFolder // ✅ QO'SHIMCHA TEKSHIRISH UCHUN
+            };
             
-//             articles.push(article);
-//             console.log(`✅ Loaded: ${article.title} (${levelFolder} - ${vocabulary.length} words)`);
+            articles.push(article);
+            console.log(`✅ Loaded: ${article.title} (${levelFolder} - ${vocabulary.length} words)`);
             
-//           } catch (error) {
-//             console.error(`❌ Error loading ${file}:`, error.message);
-//           }
-//         }
+          } catch (error) {
+            console.error(`❌ Error loading ${file}:`, error.message);
+          }
+        }
         
-//       } catch (error) {
-//         console.log(`⚠️ ${levelFolder} folder not found, skipping...`);
-//       }
-//     }
+      } catch (error) {
+        console.log(`⚠️ ${levelFolder} folder not found, skipping...`);
+      }
+    }
     
-//     console.log(`✅ Total articles loaded: ${articles.length}`);
-//     return articles;
+    console.log(`✅ Total articles loaded: ${articles.length}`);
+    return articles;
     
-//   } catch (error) {
-//     console.error("❌ Articles directory not found:", error.message);
-//     return [];
-//   }
-// }
+  } catch (error) {
+    console.error("❌ Articles directory not found:", error.message);
+    return [];
+  }
+}
 
 // ============================================
 // IMPROVED TITLE EXTRACTION - IELTS ZONE NI OLIB TASHLASH ✅
