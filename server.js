@@ -2,6 +2,7 @@
 
 require("dotenv").config();
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Tesseract = require('tesseract.js');
 
 // Common Modules
 const express = require("express");
@@ -167,6 +168,80 @@ async function callSmartAIWithImage(prompt, base64Image, mediaType) {
     }
     
     throw error;
+  }
+}
+
+// ============================================
+// OCR - IMAGE TO TEXT (FALLBACK) 🔤
+// ============================================
+async function extractTextFromImage(base64Image, mediaType) {
+  try {
+    console.log('🔍 OCR: Converting image to text...');
+    
+    // Convert base64 to buffer
+    const imageBuffer = Buffer.from(base64Image, 'base64');
+    
+    // Use Tesseract OCR
+    const { data: { text } } = await Tesseract.recognize(
+      imageBuffer,
+      'eng', // Language: English
+      {
+        logger: m => console.log('OCR Progress:', m)
+      }
+    );
+    
+    console.log('✅ OCR extracted text:', text.substring(0, 100) + '...');
+    return text.trim();
+    
+  } catch (error) {
+    console.error('❌ OCR error:', error);
+    throw new Error('Rasmdan matn ajratib olinmadi. Iltimos, aniqroq rasm yuklang.');
+  }
+}
+
+// ============================================
+// SMART IMAGE PROCESSING WITH FALLBACK 🧠
+// ============================================
+async function processImageWithFallback(prompt, base64Image, mediaType) {
+  // 1️⃣ TRY GEMINI (with image)
+  try {
+    console.log('🤖 [1/2] Trying Gemini with image...');
+    const result = await callGeminiWithImage(prompt, base64Image, mediaType);
+    console.log('✅ Gemini (image) successful!');
+    return result;
+  } catch (geminiError) {
+    console.error('⚠️ Gemini (image) failed:', geminiError.message);
+    
+    // 2️⃣ FALLBACK: OCR + DeepSeek/Groq
+    try {
+      console.log('🔄 [2/2] Falling back to OCR + Text AI...');
+      
+      // Extract text from image
+      const extractedText = await extractTextFromImage(base64Image, mediaType);
+      
+      if (!extractedText || extractedText.length < 10) {
+        throw new Error('Rasmdan matn aniqlanmadi. Iltimos, tozaroq rasm yuklang yoki matn ko\'rinishida yuboring.');
+      }
+      
+      // Add extracted text to prompt
+      const enhancedPrompt = `${prompt}\n\n📸 RASMDAGI MATN (OCR orqali aniqlandi):\n${extractedText}`;
+      
+      // Use text-based AI (DeepSeek or Groq)
+      const result = await callSmartAI(enhancedPrompt, 4096);
+      console.log('✅ OCR + Text AI successful!');
+      
+      return result;
+      
+    } catch (ocrError) {
+      console.error('❌ OCR fallback failed:', ocrError.message);
+      throw new Error(
+        '⚠️ Rasmni tahlil qilishda xatolik yuz berdi.\n\n' +
+        '📝 Iltimos, quyidagilardan birini qiling:\n' +
+        '1️⃣ Vazifani MATN ko\'rinishida yuboring\n' +
+        '2️⃣ Aniqroq/tozaroq rasm yuklang\n' +
+        '3️⃣ Keyinroq qayta urinib ko\'ring'
+      );
+    }
   }
 }
 
@@ -568,11 +643,31 @@ Brief solution: [Step-by-step briefly]
     let rawResponse;
 
     if (type === "image") {
-      const base64Data = image.split(",")[1];
-      const mediaType = image.split(";")[0].split(":")[1];
-      const prompt = `${selectedPrompt.instruction}\n\nRasmdagi uy vazifani tekshir va batafsil tushuntir.\n\n${selectedPrompt.sections}`;
-      rawResponse = await callSmartAIWithImage(prompt, base64Data, mediaType);
-    } else {
+  // ✅ Image data validation
+  if (!image || !image.includes('base64,')) {
+    throw new Error('Invalid image data format');
+  }
+  
+  const base64Data = image.split(",")[1];
+  const mediaType = image.split(";")[0].split(":")[1];
+  
+  console.log('🖼️ Image processing:', {
+    mediaType,
+    base64Length: base64Data.length,
+    language
+  });
+  
+  const prompt = `${selectedPrompt.instruction}\n\nRasmdagi uy vazifani tekshir va batafsil tushuntir.\n\n${selectedPrompt.sections}`;
+  
+  // ✅ Use smart fallback system
+  try {
+    rawResponse = await processImageWithFallback(prompt, base64Data, mediaType);
+    console.log('✅ Image processed successfully');
+  } catch (imageError) {
+    console.error('❌ Image processing failed:', imageError.message);
+    throw imageError;
+  }
+} else {
       const prompt = `${selectedPrompt.instruction}\n\n📝 UY VAZIFA:\n${homework}\n\n${selectedPrompt.sections}`;
       rawResponse = await callSmartAI(prompt, 4096);
     }
@@ -676,13 +771,13 @@ if (/biology|cell|organism|dna|gene|evolution|биология|клетка|ор
 // WRITING CHECKER API - IELTS TASK 1/2
 // ============================================
 // ============================================
-// WRITING CHECKER API - UPDATED WITH IMAGE & TOPIC ✅
+// WRITING CHECKER API - IMPROVED BAND SCORING ✅
 // ============================================
 app.post("/api/check-writing", async (req, res) => {
   try {
-    const { text, taskType, language = "uz", topic, image } = req.body;
+    const { text, taskType, language = "uz", topic, topicImage, chartImage } = req.body;
 
-    // ✅ VALIDATION 1: Text check
+    // ✅ VALIDATION
     if (!text || text.trim() === "") {
       return res.status(400).json({ 
         error: "Text yuborilmadi", 
@@ -690,15 +785,13 @@ app.post("/api/check-writing", async (req, res) => {
       });
     }
 
-    // ✅ VALIDATION 2: Topic check (MAJBURIY)
-    if (!topic || topic.trim() === "") {
+    if (!topic && !topicImage) {
       return res.status(400).json({ 
         error: "Topic is required / Topic kiriting", 
         success: false 
       });
     }
 
-    // ✅ VALIDATION 3: Word count
     const wordCount = text.trim().split(/\s+/).length;
 
     if (wordCount < 150) {
@@ -713,208 +806,492 @@ app.post("/api/check-writing", async (req, res) => {
       wordCount,
       language,
       hasTopic: !!topic,
-      hasImage: !!image
+      hasTopicImage: !!topicImage,
+      hasChartImage: !!chartImage
     });
 
+    // ✅ IMPROVED PROMPTS WITH STRICT BAND SCORING
     const prompts = {
-      uz: `Sen professional IELTS Writing examiner san. Quyidagi ${taskType} javobini batafsil baholab ber.
+      uz: `Sen professional IELTS Writing examiner san va 10+ yillik tajribaga egasan. Quyidagi ${taskType} javobini juda ANIQ va OBJEKTIV baholab ber.
 
-📝 TOPIC/SAVOL:
-${topic}
+📝 MAVZU/SAVOL:
+${topic || '[Rasm orqali berilgan]'}
 
-${image ? '📊 CHART/DIAGRAM: [Student uploaded a chart/diagram image]\n' : ''}
+${topicImage ? '📊 MAVZU RASMI: Rasmda berilgan savol/mavzuni ko\'rib tahlil qil.\n' : ''}
+${taskType === 'Task 1' && chartImage ? '📈 GRAFIK/DIAGRAMMA: Talaba bu grafik/diagramma bo\'yicha yozgan. Rasmni diqqat bilan ko\'r va talaba haqiqatda rasmda ko\'rsatilgan ma\'lumotlarni to\'g\'ri tasvirlaganmi tekshir.\n' : ''}
 
-🎤 STUDENT'S ANSWER:
+🎤 TALABANING JAVOBI:
 ${text}
 
-📊 WORD COUNT: ${wordCount}
+📊 SO'ZLAR SONI: ${wordCount}
 
-⚠️ MUHIM: Javob topicga mos keladimi tekshir! Agar topic boshqa, answer boshqa bo'lsa, ball tushadi!
+⚠️ MUHIM BAND BAHOLASH QOIDALARI:
+
+**BAND 9.0:** 
+- NOLGA TENG grammatika xatolari
+- Murakkab lug'at TAKRORLANISHSIZ
+- Mukammal izchillik va tabiiy oqim
+- Turli tuzilmali murakkab gaplar
+- Barcha topshiriq talablari to'liq bajarilgan va ajoyib ishlab chiqilgan
+
+**BAND 8.0-8.5:**
+- Juda kam grammatika xatolari (maksimum 1-2 ta kichik xato)
+- Keng lug'at doirasi, kamdan-kam takrorlanish
+- Kuchli izchillik va ajoyib bog'lovchilar
+- Tez-tez murakkab gaplar
+- Barcha topshiriq talablari yaxshi bajarilgan
+${taskType === 'Task 1' ? '- Aniq ma\'lumotlar tavsifi va ajoyib taqqoslashlar' : '- Yaxshi ishlab chiqilgan dalillar va tegishli misollar'}
+
+**BAND 7.0-7.5:**
+- Ba'zi grammatika xatolari (3-5 ta xato) lekin muloqotga xalaqit bermaydi
+- Yaxshi lug'at doirasi, vaqti-vaqti bilan takrorlanish
+- Umuman izchil, yaxshi bog'lovchilar
+- Oddiy va murakkab gaplar aralashmasi
+- Topshiriq talablari bajarilgan, lekin ko'proq ishlab chiqilishi mumkin edi
+${taskType === 'Task 1' ? '- Umuman aniq ma\'lumotlar, ba\'zi taqqoslashlar' : '- Aniq pozitsiya, ba\'zi ishlab chiqish'}
+
+**BAND 6.0-6.5:**
+- Sezilarli grammatika xatolari (6-10 ta xato)
+- Yetarli lug'at, takrorlanishlar bilan
+- Izchil, lekin oddiy bog'lovchilar
+- Asosan oddiy gaplar, kam murakkab
+- Topshiriq qisman bajarilgan
+${taskType === 'Task 1' ? '- Oddiy ma\'lumotlar tavsifi, cheklangan taqqoslashlar' : '- Pozitsiya ko\'rsatilgan, lekin cheklangan ishlab chiqish'}
+
+**BAND 5.0-5.5:**
+- Tez-tez grammatika xatolari (10+ xato)
+- Cheklangan lug'at, ko'p takrorlanish
+- Oddiy yoki noaniq tashkilot
+- Asosan oddiy gaplar
+- Topshiriq yetarli darajada bajarilmagan
+
+${taskType === 'Task 1' && chartImage ? `
+**TASK 1 UCHUN MAXSUS TALABLAR:**
+1. GRAFIK ANIQLIGI: Talaba rasmda ko'rsatilgan aniq ma'lumotlarni to'g'ri yozganmi?
+2. MA'LUMOTLARNI TEKSHIRISH: Raqamlar, foizlar, joy nomlari to'g'rimi?
+3. ASOSIY XUSUSIYATLAR: Rasmda ko'rsatilgan muhim ma'lumotlar yozilganmi?
+4. TAQQOSLASHLAR: Taqqoslashlar qilinganmi?
+5. UMUMIY KO'RINISH: Umumiy trend/naqsh tasvirlanganmi?
+` : ''}
+
+⚠️ MUHIM: Agar insho haqiqatan ham Band 8+ darajasida bo'lsa (0-2 xato, murakkab lug'at, mukammal izchillik), BALDAN KAMAYTRIMA!
 
 JAVOBNI QUYIDAGI FORMATDA BER:
 
-**1. TOPIC RELEVANCE CHECK ✅:**
-Javob topicga mos keladimi? (Ha/Yo'q)
-Agar yo'q bo'lsa, ball -2 band yoki kamroq bo'lishi kerak.
+**1. MAVZUGA MUVOFIQLIKNI TEKSHIRISH ✅:**
+Javob mavzuga mos keladimi? (Ha/Yo'q)
+${taskType === 'Task 1' && chartImage ? 'Rasmda ko\'rsatilgan ma\'lumotlar to\'g\'ri tasvirlanganmi? (Ha/Yo\'q)\n' : ''}
 
-**2. OVERALL BAND SCORE:**
-Band X.X/9.0 (aniq ball)
+**2. UMUMIY BAND BALI:**
+Band X.X/9.0 (ANIQ BAL - agar insho haqiqatan ham yaxshi bo'lsa, 8.0+ ber)
 
-**3. DETAILED SCORES:**
-✅ Task Achievement: X/9
-📝 Coherence & Cohesion: X/9
-📚 Lexical Resource: X/9
-✏️ Grammatical Range & Accuracy: X/9
+**3. BATAFSIL BALLAR:**
+✅ Task Achievement: X.X/9 (har bir mezoni alohida tekshir)
+📝 Coherence & Cohesion: X.X/9
+📚 Lexical Resource: X.X/9
+✏️ Grammatical Range & Accuracy: X.X/9
 
-**4. VOCABULARY ANALYSIS:**
-🎯 Level: (A1/A2/B1/B2/C1/C2)
-📖 Strong Words: [5 ta eng yaxshi so'z, vergul bilan ajratilgan]
-⚠️ Repetitive: [ko'p takrorlangan 3-5 ta so'z: word(x soni)]
-💡 Synonyms: [faqat takrorlangan so'zlar uchun qisqacha sinonimlar]
+**4. BATAFSIL TAHLIL:**
 
-**5. GRAMMAR MISTAKES:**
-❌ Total Errors: X ta
+📖 **LUG'AT SIFATI:**
+🎯 Daraja: (A1/A2/B1/B2/C1/C2)
+📚 Kuchli So'zlar: [5+ ta murakkab so'zlar]
+⚠️ Takrorlanuvchi: [takrorlangan so'zlar]
+💡 Sinonimlar Kerak: [kerakli sinonimlar]
+🔥 Ilg'or Kollokatsiyalar: [agar band 8+ bo'lsa, qanday kollokatsiyalar ishlatilgan]
 
-[Faqat eng muhim 5-7 ta xatoni ko'rsat, qisqa format:]
-**#1:** "noto'g'ri gap" → "to'g'ri variant" (Rule: ...)
+**5. GRAMMATIKA TAHLILI:**
+❌ Jami Xatolar: X ta (ANIQ SON)
+📊 Xato Turlari: [xato turlari: artikl, zamon, kelishish va h.k.]
 
-**6. TASK RESPONSE:**
-(${taskType === 'Task 2' ? '250+ words, opinion/discussion' : '150+ words, graph/chart description'})
-- Savolga to'liq javob berilganmi? Ha/Yo'q ✓/✗
-- Fikrlar aniq va mantiqiymi? Ha/Yo'q ✓/✗
-- Misollar etarlicha bormi? Ha/Yo'q ✓/✗
-${taskType === 'Task 1' ? '- Chartdagi asosiy ma\'lumotlar to\'g\'ri tasvirlandimi? Ha/Yo\'q ✓/✗' : ''}
+[Faqat MUHIM xatolarni ko'rsat - agar 0-2 xato bo'lsa, barchasini yoz:]
+**#1:** "noto'g'ri" → "to'g'ri" (Qoida: ...)
 
-**7. GRAMMAR PATTERNS TO IMPROVE:**
-Quyidagilarni ko'proq ishlating:
-✓ IF Conditionals (Type 1,2,3)
-✓ Passive Voice
-✓ Complex Sentences
-✓ Relative Clauses (who, which, that)
-✓ Modal Verbs (should, could, must)
+${taskType === 'Task 1' ? `
+**6. TASK 1 TALABLARI:**
+- Umumiy ko'rinish mavjudmi? Ha/Yo'q ✓/✗
+- Asosiy xususiyatlar tasvirlanganni? Ha/Yo'q ✓/✗
+- Ma'lumotlar aniqligi (agar grafik bo'lsa)? Ha/Yo'q ✓/✗
+- Taqqoslashlar qilinganmi? Ha/Yo'q ✓/✗
+- Mos uzunlik (150+)? Ha/Yo'q ✓/✗
+` : `
+**6. TASK 2 TALABLARI:**
+- Aniq pozitsiya? Ha/Yo'q ✓/✗
+- Yaxshi ishlab chiqilgan dalillar? Ha/Yo'q ✓/✗
+- Tegishli misollar? Ha/Yo'q ✓/✗
+- Mantiqiy tuzilma? Ha/Yo'q ✓/✗
+- Mos uzunlik (250+)? Ha/Yo'q ✓/✗
+`}
 
-**8. IMPROVEMENT TIPS:**
-- [3 ta qisqa maslahat]
+**7. COHERENCE & COHESION:**
+- Ishlatilgan bog'lovchi vositalar: [ro'yxat]
+- Paragraflar tashkili: [baholash]
+- Mantiqiy oqim: [baholash]
 
-⚠️ Javobni FAQAT O'ZBEK TILIDA BER! 🇺🇿`,
+**8. YAXSHILASH UCHUN GRAMMATIK NAQSHLAR:**
+- Tavsiya etilgan tuzilmalar: [complex sentences, conditionals, passive, etc.]
+- Umumiy xatolar: [recommendations to reduce common mistakes]
 
-      ru: `Ты профессиональный IELTS Writing examiner. Оцени следующий ${taskType} ответ подробно.
+**9. NEGA BU BAND? (ASOSLASH):**
+[Nega aynan shu band balini berganingni tushuntir - bu juda muhim!]
+- Grammatika: [sabab]
+- Lug'at: [sabab]
+- Izchillik: [sabab]
+- Topshiriqni Bajarish: [sabab]
+
+**10. KEYINGI BANDGA YETISH:**
+[Hozirgi band ballidan +1.0 yuqori bandga yetish uchun aniq ko'rsatmalar. Masalan agar 7.0 bergan bo'lsang, "BAND 7.0 → 8.0" deb yoz]
+- Tuzatish: [nimani tuzatish kerak]
+- Qo'shish: [nimani qo'shish kerak]
+- Yaxshilash: [nimani yaxshilash kerak]
+
+**11. YAKUNIY VERDICT:**
+${wordCount < 250 && taskType === 'Task 2' ? '⚠️ So\'zlar soni juda kam - maksimal band 6.5' : ''}
+[Umumiy xulosa - insho band 8+ ga loyiqmi yoki yo'qmi, aniq sabab bilan]
+
+⚠️ JAVOBNI FAQAT O'ZBEK TILIDA BER! 🇺🇿
+⚠️ Band balini ADOLATLI qo'y - agar insho haqiqatan ham yaxshi bo'lsa, 8.0+ ber!`,
+
+      ru: `Ты профессиональный IELTS Writing examiner с опытом 10+ лет. Оцени следующий ${taskType} ответ ТОЧНО и ОБЪЕКТИВНО.
 
 📝 ТЕМА/ВОПРОС:
-${topic}
+${topic || '[Дано через изображение]'}
 
-${image ? '📊 ГРАФИК/ДИАГРАММА: [Студент загрузил изображение графика/диаграммы]\n' : ''}
+${topicImage ? '📊 ИЗОБРАЖЕНИЕ ТЕМЫ: Проанализируй вопрос/тему, данную на картинке.\n' : ''}
+${taskType === 'Task 1' && chartImage ? '📈 ГРАФИК/ДИАГРАММА: Студент писал по этому графику/диаграмме. Внимательно посмотри на картинку и проверь, правильно ли студент описал данные, показанные на изображении.\n' : ''}
 
 🎤 ОТВЕТ СТУДЕНТА:
 ${text}
 
 📊 КОЛИЧЕСТВО СЛОВ: ${wordCount}
 
-⚠️ ВАЖНО: Проверь, соответствует ли ответ теме! Если тема другая, а ответ другой - балл снижается!
+⚠️ КРИТИЧЕСКИЕ ПРАВИЛА ОЦЕНКИ ПО BAND:
 
-ОТВЕТ ПРЕДСТАВЬ В ТАКОМ ФОРМАТЕ:
+**BAND 9.0:** 
+- НОЛЬ грамматических ошибок
+- Сложная лексика БЕЗ повторений
+- Идеальная связность и естественный поток
+- Сложные предложения с разнообразными структурами
+- Все требования задания полностью выполнены с отличной проработкой
 
-**1. ПРОВЕРКА РЕЛЕВАНТНОСТИ ТЕМЕ ✅:**
+**BAND 8.0-8.5:**
+- Очень мало грамматических ошибок (максимум 1-2 незначительные ошибки)
+- Широкий диапазон лексики с редкими повторениями
+- Сильная связность с отличными linking words
+- Частые сложные предложения
+- Все требования задания хорошо выполнены
+${taskType === 'Task 1' ? '- Точное описание данных с отличными сравнениями' : '- Хорошо развитые аргументы с релевантными примерами'}
+
+**BAND 7.0-7.5:**
+- Некоторые грамматические ошибки (3-5 ошибок), но не мешают коммуникации
+- Хороший диапазон лексики с редкими повторениями
+- В целом связно с хорошими linking words
+- Смесь простых и сложных предложений
+- Требования задания выполнены, но могли быть лучше проработаны
+${taskType === 'Task 1' ? '- В целом точные данные с некоторыми сравнениями' : '- Четкая позиция с некоторой проработкой'}
+
+**BAND 6.0-6.5:**
+- Заметные грамматические ошибки (6-10 ошибок)
+- Адекватная лексика с повторениями
+- Связно, но базовые linking words
+- В основном простые предложения, мало сложных
+- Задание выполнено частично
+${taskType === 'Task 1' ? '- Базовое описание данных, ограниченные сравнения' : '- Позиция заявлена, но ограниченная проработка'}
+
+**BAND 5.0-5.5:**
+- Частые грамматические ошибки (10+ ошибок)
+- Ограниченная лексика с большим количеством повторений
+- Базовая или неясная организация
+- В основном простые предложения
+- Задание выполнено неадекватно
+
+${taskType === 'Task 1' && chartImage ? `
+**СПЕЦИФИЧЕСКИЕ ТРЕБОВАНИЯ ДЛЯ TASK 1:**
+1. ТОЧНОСТЬ ГРАФИКА: Правильно ли студент описал точные данные, показанные на картинке?
+2. ПРОВЕРКА ДАННЫХ: Правильны ли цифры, проценты, названия мест?
+3. КЛЮЧЕВЫЕ ОСОБЕННОСТИ: Описаны ли важные данные, показанные на картинке?
+4. СРАВНЕНИЯ: Сделаны ли сравнения?
+5. ОБЗОР: Описан ли общий тренд/паттерн?
+` : ''}
+
+⚠️ ВАЖНО: Если эссе действительно на уровне Band 8+ (0-2 ошибки, сложная лексика, идеальная связность), НЕ ЗАНИЖАЙ БАЛЛ!
+
+ДАЙ ОТВЕТ В СЛЕДУЮЩЕМ ФОРМАТЕ:
+
+**1. ПРОВЕРКА СООТВЕТСТВИЯ ТЕМЕ ✅:**
 Соответствует ли ответ теме? (Да/Нет)
-Если нет, балл должен быть -2 band или меньше.
+${taskType === 'Task 1' && chartImage ? 'Правильно ли описаны данные, показанные на картинке? (Да/Нет)\n' : ''}
 
-**2. ОБЩИЙ БАЛЛ:**
-Band X.X/9.0 (точный балл)
+**2. ОБЩИЙ БАЛЛ BAND:**
+Band X.X/9.0 (ТОЧНЫЙ БАЛЛ - если эссе действительно хорошее, ставь 8.0+)
 
 **3. ДЕТАЛЬНЫЕ БАЛЛЫ:**
-✅ Task Achievement: X/9
-📝 Coherence & Cohesion: X/9
-📚 Lexical Resource: X/9
-✏️ Grammatical Range & Accuracy: X/9
+✅ Task Achievement: X.X/9 (проверяй каждый критерий отдельно)
+📝 Coherence & Cohesion: X.X/9
+📚 Lexical Resource: X.X/9
+✏️ Grammatical Range & Accuracy: X.X/9
 
-**4. АНАЛИЗ ЛЕКСИКИ:**
+**4. ДЕТАЛЬНЫЙ АНАЛИЗ:**
+
+📖 **КАЧЕСТВО ЛЕКСИКИ:**
 🎯 Уровень: (A1/A2/B1/B2/C1/C2)
-📖 Сильные слова: [список 5 лучших слов через запятую]
-⚠️ Повторяющиеся: [3-5 часто повторяющихся слов с количеством]
-💡 Синонимы: [только для повторяющихся слов]
+📚 Сильные слова: [5+ сложных слов]
+⚠️ Повторяющиеся: [повторяющиеся слова]
+💡 Нужны синонимы: [необходимые синонимы]
+🔥 Продвинутые коллокации: [если band 8+, какие коллокации использованы]
 
-**5. ГРАММАТИЧЕСКИЕ ОШИБКИ:**
-❌ Количество: X
+**5. ГРАММАТИЧЕСКИЙ АНАЛИЗ:**
+❌ Всего ошибок: X штук (ТОЧНОЕ КОЛИЧЕСТВО)
+📊 Типы ошибок: [типы ошибок: артикли, времена, согласование и т.д.]
 
-[Только 5-7 главных ошибок, короткий формат:]
+[Показывай только ВАЖНЫЕ ошибки - если 0-2 ошибки, пиши все:]
 **#1:** "неправильно" → "правильно" (Правило: ...)
 
-**6. ОТВЕТ НА ЗАДАНИЕ:**
-(${taskType === 'Task 2' ? '250+ слов, мнение/обсуждение' : '150+ слов, описание графика'})
-- Полностью ответил на вопрос? Да/Нет ✓/✗
-- Идеи ясны и логичны? Да/Нет ✓/✗
-- Достаточно примеров? Да/Нет ✓/✗
-${taskType === 'Task 1' ? '- Правильно описаны данные графика? Да/Нет ✓/✗' : ''}
+${taskType === 'Task 1' ? `
+**6. ТРЕБОВАНИЯ TASK 1:**
+- Overview присутствует? Да/Нет ✓/✗
+- Ключевые особенности описаны? Да/Нет ✓/✗
+- Точность данных (если график)? Да/Нет ✓/✗
+- Сделаны сравнения? Да/Нет ✓/✗
+- Подходящая длина (150+)? Да/Нет ✓/✗
+` : `
+**6. ТРЕБОВАНИЯ TASK 2:**
+- Четкая позиция? Да/Нет ✓/✗
+- Хорошо развитые аргументы? Да/Нет ✓/✗
+- Релевантные примеры? Да/Нет ✓/✗
+- Логическая структура? Да/Нет ✓/✗
+- Подходящая длина (250+)? Да/Нет ✓/✗
+`}
 
-**7. ГРАММАТИЧЕСКИЕ СТРУКТУРЫ:**
-Используй больше:
-✓ IF Conditionals (Type 1,2,3)
-✓ Passive Voice
-✓ Complex Sentences
-✓ Relative Clauses
-✓ Modal Verbs
+**7. COHERENCE & COHESION:**
+- Использованные linking devices: [список]
+- Организация параграфов: [оценка]
+- Логический поток: [оценка]
 
-**8. СОВЕТЫ:**
-- [3 совета]
+**8. ГРАММАТИЧЕСКИЕ ПАТТЕРНЫ ДЛЯ УЛУЧШЕНИЯ:**
+- Предлагаемые структуры: [complex sentences, conditionals, passive, etc.]
+- Частые ошибки: [recommendations to reduce errors]
 
-⚠️ ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ! 🇷🇺`,
+**9. ПОЧЕМУ ЭТОТ BAND? (ОБОСНОВАНИЕ):**
+[Объясни, почему поставил именно этот балл - это очень важно!]
+- Грамматика: [причина]
+- Лексика: [причина]
+- Связность: [причина]
+- Task Response: [причина]
 
-      en: `You are a professional IELTS Writing examiner. Evaluate the following ${taskType} response in detail.
+**10. ДЛЯ ДОСТИЖЕНИЯ СЛЕДУЮЩЕГО BAND:**
+[Точные инструкции для достижения band на +1.0 выше текущего. Например, если поставил 7.0, напиши "BAND 7.0 → 8.0"]
+- Исправить: [что нужно исправить]
+- Добавить: [что нужно добавить]
+- Улучшить: [что нужно улучшить]
+
+**11. ИТОГОВЫЙ ВЕРДИКТ:**
+${wordCount < 250 && taskType === 'Task 2' ? '⚠️ Количество слов слишком мало - максимальный band 6.5' : ''}
+[Общий вывод - заслуживает ли эссе band 8+ или нет, с четкой причиной]
+
+⚠️ ДАЙ ОТВЕТ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! 🇷🇺
+⚠️ Ставь балл СПРАВЕДЛИВО - если эссе действительно хорошее, ставь 8.0+!`,
+
+      en: `You are a professional IELTS Writing examiner with 10+ years experience. Evaluate this ${taskType} response ACCURATELY and OBJECTIVELY.
 
 📝 TOPIC/QUESTION:
-${topic}
+${topic || '[Given through image]'}
 
-${image ? '📊 CHART/DIAGRAM: [Student uploaded a chart/diagram image]\n' : ''}
+${topicImage ? '📊 TOPIC IMAGE: Analyze the question/topic given in the picture.\n' : ''}
+${taskType === 'Task 1' && chartImage ? '📈 CHART/DIAGRAM: The student wrote about this chart/diagram. Look carefully at the picture and check if the student correctly described the data shown in the image.\n' : ''}
 
 🎤 STUDENT'S ANSWER:
 ${text}
 
 📊 WORD COUNT: ${wordCount}
 
-⚠️ IMPORTANT: Check if the answer is relevant to the topic! If topic is different and answer is different, score must be reduced!
+⚠️ CRITICAL BAND SCORING RULES:
 
-PROVIDE YOUR ANSWER IN THIS FORMAT:
+**BAND 9.0:** 
+- ZERO grammar errors
+- Sophisticated vocabulary with NO repetition
+- Perfect coherence and natural flow
+- Complex sentences with varied structures
+- All task requirements fully addressed with excellent development
+
+**BAND 8.0-8.5:**
+- Very few grammar errors (1-2 minor mistakes maximum)
+- Wide range of vocabulary with rare repetition
+- Strong coherence with excellent linking
+- Frequent complex sentences
+- All task requirements well addressed
+${taskType === 'Task 1' ? '- Accurate data description with excellent comparisons' : '- Well-developed arguments with relevant examples'}
+
+**BAND 7.0-7.5:**
+- Some grammar errors (3-5 mistakes) but don't impede communication
+- Good vocabulary range with occasional repetition
+- Generally coherent with good linking
+- Mix of simple and complex sentences
+- Task requirements addressed but could be more developed
+${taskType === 'Task 1' ? '- Generally accurate data with some comparisons' : '- Clear position with some development'}
+
+**BAND 6.0-6.5:**
+- Noticeable grammar errors (6-10 mistakes)
+- Adequate vocabulary with repetition
+- Coherent but basic linking
+- Mostly simple sentences, few complex
+- Task partially addressed
+${taskType === 'Task 1' ? '- Basic data description, limited comparisons' : '- Position stated but limited development'}
+
+**BAND 5.0-5.5:**
+- Frequent grammar errors (10+ mistakes)
+- Limited vocabulary with much repetition
+- Basic or unclear organization
+- Mostly simple sentences
+- Task inadequately addressed
+
+${taskType === 'Task 1' && chartImage ? `
+**TASK 1 SPECIFIC REQUIREMENTS:**
+1. CHART ACCURACY: Did the student correctly write the exact data shown in the picture?
+2. DATA VERIFICATION: Are the numbers, percentages, place names correct?
+3. KEY FEATURES: Are the important data shown in the picture written?
+4. COMPARISONS: Are comparisons made?
+5. OVERVIEW: Is the overall trend/pattern described?
+` : ''}
+
+⚠️ IMPORTANT: If the essay is truly at Band 8+ level (0-2 errors, complex vocabulary, perfect coherence), DON'T REDUCE THE SCORE!
+
+GIVE YOUR ANSWER IN THE FOLLOWING FORMAT:
 
 **1. TOPIC RELEVANCE CHECK ✅:**
 Does the answer match the topic? (Yes/No)
-If no, score should be -2 bands or less.
+${taskType === 'Task 1' && chartImage ? 'Are the data shown in the picture correctly described? (Yes/No)\n' : ''}
 
 **2. OVERALL BAND SCORE:**
-Band X.X/9.0 (exact score)
+Band X.X/9.0 (EXACT SCORE - if the essay is truly good, give 8.0+)
 
 **3. DETAILED SCORES:**
-✅ Task Achievement: X/9
-📝 Coherence & Cohesion: X/9
-📚 Lexical Resource: X/9
-✏️ Grammatical Range & Accuracy: X/9
+✅ Task Achievement: X.X/9 (check each criterion separately)
+📝 Coherence & Cohesion: X.X/9
+📚 Lexical Resource: X.X/9
+✏️ Grammatical Range & Accuracy: X.X/9
 
-**4. VOCABULARY ANALYSIS:**
+**4. DETAILED ANALYSIS:**
+
+📖 **VOCABULARY QUALITY:**
 🎯 Level: (A1/A2/B1/B2/C1/C2)
-📖 Strong Words: [5 best words, comma-separated]
-⚠️ Repetitive: [3-5 frequently repeated words with count]
-💡 Synonyms: [only for repeated words]
+📚 Strong Words: [5+ sophisticated words]
+⚠️ Repetitive: [repeated words]
+💡 Synonyms Needed: [necessary synonyms]
+🔥 Advanced Collocations: [if band 8+, what collocations were used]
 
-**5. GRAMMAR MISTAKES:**
-❌ Total: X
+**5. GRAMMAR ANALYSIS:**
+❌ Total Errors: X (EXACT NUMBER)
+📊 Error Types: [error types: articles, tenses, agreement, etc.]
 
-[Only 5-7 main errors, short format:]
+[Show only IMPORTANT errors - if 0-2 errors, write all:]
 **#1:** "incorrect" → "correct" (Rule: ...)
 
-**6. TASK RESPONSE:**
-(${taskType === 'Task 2' ? '250+ words, opinion/discussion' : '150+ words, graph/chart description'})
-- Fully answered the question? Yes/No ✓/✗
-- Ideas clear and logical? Yes/No ✓/✗
-- Sufficient examples? Yes/No ✓/✗
-${taskType === 'Task 1' ? '- Chart data correctly described? Yes/No ✓/✗' : ''}
+${taskType === 'Task 1' ? `
+**6. TASK 1 REQUIREMENTS:**
+- Overview present? Yes/No ✓/✗
+- Key features described? Yes/No ✓/✗
+- Data accuracy (if chart)? Yes/No ✓/✗
+- Comparisons made? Yes/No ✓/✗
+- Appropriate length (150+)? Yes/No ✓/✗
+` : `
+**6. TASK 2 REQUIREMENTS:**
+- Clear position? Yes/No ✓/✗
+- Well-developed arguments? Yes/No ✓/✗
+- Relevant examples? Yes/No ✓/✗
+- Logical structure? Yes/No ✓/✗
+- Appropriate length (250+)? Yes/No ✓/✗
+`}
 
-**7. GRAMMAR PATTERNS:**
-Use more:
-✓ IF Conditionals (Type 1,2,3)
-✓ Passive Voice
-✓ Complex Sentences
-✓ Relative Clauses
-✓ Modal Verbs
+**7. COHERENCE & COHESION:**
+- Linking devices used: [list]
+- Paragraph organization: [evaluation]
+- Logical flow: [evaluation]
 
-**8. TIPS:**
-- [3 tips]
+**8. GRAMMAR PATTERNS TO IMPROVE:**
+- Suggested Structures: [complex sentences, conditionals, passive, etc.]
+- Common Mistakes: [recommendations to reduce errors]
 
-⚠️ ANSWER ONLY IN ENGLISH! 🇬🇧`
+**9. WHY THIS BAND? (JUSTIFICATION):**
+[Explain why you gave this band score - this is very important!]
+- Grammar: [reason]
+- Vocabulary: [reason]
+- Coherence: [reason]
+- Task Response: [reason]
+
+**10. TO REACH THE NEXT BAND:**
+[Exact instructions to reach +1.0 band higher than current. For example, if you gave 7.0, write "BAND 7.0 → 8.0"]
+- Fix: [what needs to be fixed]
+- Add: [what needs to be added]
+- Improve: [what needs to be improved]
+
+**11. FINAL VERDICT:**
+${wordCount < 250 && taskType === 'Task 2' ? '⚠️ Word count too low - maximum band 6.5' : ''}
+[Overall conclusion - does the essay deserve band 8+ or not, with clear reason]
+
+⚠️ GIVE YOUR ANSWER ONLY IN ENGLISH! 🇬🇧🇺🇸
+⚠️ Give the band score FAIRLY - if the essay is truly good, give 8.0+!`
     };
 
     const selectedPrompt = prompts[language] || prompts["uz"];
 
     let rawResponse;
 
-    // ✅ IF IMAGE EXISTS - Use Gemini with image
-    if (image) {
-      console.log('🖼️ Processing with image...');
-      const base64Data = image.split(",")[1];
-      const mediaType = image.split(";")[0].split(":")[1];
+    // ✅ IMAGE PROCESSING
+    if (topicImage || (taskType === 'Task 1' && chartImage)) {
+      try {
+        const imageParts = [];
+        
+        if (topicImage) {
+          const base64Data = topicImage.split(",")[1];
+          const mediaType = topicImage.split(";")[0].split(":")[1];
+          imageParts.push({
+            inline_data: { mime_type: mediaType, data: base64Data }
+          });
+        }
+        
+        if (taskType === 'Task 1' && chartImage) {
+          const base64Data = chartImage.split(",")[1];
+          const mediaType = chartImage.split(";")[0].split(":")[1];
+          imageParts.push({
+            inline_data: { mime_type: mediaType, data: base64Data }
+          });
+        }
+
+        const response = await fetch(GEMINI_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  ...imageParts,
+                  { text: selectedPrompt }
+                ]
+              }
+            ],
+            generationConfig: { 
+              maxOutputTokens: 8192,
+              temperature: 0.3 // ✅ Lower temperature for more consistent scoring
+            }
+          })
+        });
+
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error.message || 'Gemini error');
+        }
+
+        rawResponse = data.candidates[0].content.parts[0].text;
+        
+      } catch (geminiError) {
+        console.error('⚠️ Gemini failed, using fallback...');
+        const enhancedPrompt = selectedPrompt + '\n\n⚠️ Images uploaded but could not process. Evaluate based on text only.';
+        rawResponse = await callSmartAI(enhancedPrompt, 8192);
+      }
       
-      rawResponse = await callSmartAIWithImage(selectedPrompt, base64Data, mediaType);
     } else {
-      // ✅ Text only
-      console.log('📝 Processing text only...');
       rawResponse = await callSmartAI(selectedPrompt, 8192);
     }
 
@@ -925,11 +1302,12 @@ Use more:
       result: formattedResponse,
       wordCount: wordCount,
       taskType: taskType,
-      topic: topic
+      topic: topic,
+      hasImages: !!(topicImage || (taskType === 'Task 1' && chartImage))
     });
 
   } catch (error) {
-    console.error("❌ Writing Checker API xatosi:", error);
+    console.error("❌ Writing Checker API error:", error);
     res.status(500).json({ 
       error: error.message, 
       success: false 
@@ -938,28 +1316,69 @@ Use more:
 });
 
 // ============================================
-// MODEL ANSWER API - UPDATED WITH TOPIC ✅
+// MODEL ANSWER API - TASK 1/2 FIXED ✅
 // ============================================
 app.post("/api/generate-model-answer", async (req, res) => {
   try {
-    const { topic, taskType } = req.body;
+    const { topic, taskType, topicImage, chartImage } = req.body;
 
-    if (!topic || !taskType) {
+    if (!topic && !topicImage) {
       return res.status(400).json({
-        error: "Topic va taskType yuborilmadi",
+        error: "Topic yoki topicImage yuborilmadi",
+        success: false
+      });
+    }
+
+    if (!taskType) {
+      return res.status(400).json({
+        error: "taskType yuborilmadi",
         success: false
       });
     }
 
     console.log('📝 Generating model answer for:', taskType);
-    console.log('📋 Topic:', topic);
+    console.log('📋 Topic:', topic || '[Image]');
+    console.log('🖼️ Has Topic Image:', !!topicImage);
+    console.log('📊 Has Chart Image:', !!chartImage);
 
     const wordTarget = taskType === 'Task 2' ? '250-280' : '150-170';
 
+    // ✅ TASK-SPECIFIC PROMPTS
     const prompt = `You are a Band 9 IELTS examiner. Write a perfect ${taskType} model answer.
 
 📝 TOPIC:
-${topic}
+${topic || '[Given in image]'}
+
+${topicImage ? '📊 TOPIC IMAGE: Look at the topic/question image carefully.\n' : ''}
+${taskType === 'Task 1' && chartImage ? `
+📈 CHART/DIAGRAM IMAGE: Look at the chart/diagram carefully.
+
+CRITICAL RULES FOR TASK 1 WITH CHART:
+1. Use EXACT names from the chart (cities, countries, categories, etc.)
+2. If chart shows "Tokyo, London, Berlin, Moscow" - write THESE exact names, NOT "City A, City B"
+3. Include EXACT numbers, percentages, dates from the chart
+4. Describe KEY FEATURES visible in the chart
+5. Make accurate COMPARISONS between data points
+6. Describe TRENDS (increasing, decreasing, fluctuating, etc.)
+7. Write OVERVIEW paragraph mentioning the most significant features
+
+NEVER use generic labels like "City A, City B" - ALWAYS use actual names from the chart!
+` : taskType === 'Task 2' ? `
+CRITICAL RULES FOR TASK 2 ESSAY:
+1. Write a clear THESIS STATEMENT in introduction
+2. Develop 2-3 main arguments with specific examples
+3. Use advanced vocabulary and complex grammar structures
+4. Include cohesive devices (however, moreover, consequently, etc.)
+5. Write a strong conclusion summarizing your position
+6. DO NOT describe any charts or diagrams (Task 2 is opinion/discussion essay)
+7. Focus on argumentation, examples, and logical reasoning
+
+STRUCTURE:
+- Introduction: Paraphrase question + Clear thesis statement
+- Body Paragraph 1: Main argument + Supporting details + Example
+- Body Paragraph 2: Second argument + Supporting details + Example
+- Conclusion: Summarize position without introducing new ideas
+` : ''}
 
 CRITICAL REQUIREMENTS:
 - Write ONLY in English (no other language)
@@ -967,18 +1386,172 @@ CRITICAL REQUIREMENTS:
 - Exactly ${wordTarget} words
 - ${taskType === 'Task 2' 
   ? 'Clear thesis statement with strong arguments, relevant examples, and logical conclusion' 
-  : 'Accurate description with overview, key features, comparisons, and data'}
-- Use advanced vocabulary (sophisticated, intricate, substantial, etc.)
+  : chartImage 
+    ? 'Accurate description with overview, specific data from chart (cities, numbers, dates), comparisons, and trends - USE EXACT NAMES FROM CHART' 
+    : 'Accurate description with overview, key features, comparisons, and data'}
+- Use advanced vocabulary (sophisticated, intricate, substantial, considerable, pronounced, etc.)
 - Use complex sentences with subordinate clauses
 - Use perfect grammar: conditionals, passive voice, relative clauses
-- Use excellent linking words (however, moreover, furthermore, nevertheless, consequently)
+- Use excellent linking words (however, moreover, furthermore, nevertheless, consequently, whereas, notwithstanding)
 - ${taskType === 'Task 2' 
   ? '4 paragraphs: Introduction (paraphrase + thesis), Body 1 (argument 1 + example), Body 2 (argument 2 + example), Conclusion (summarize without new ideas)' 
-  : '3 paragraphs: Introduction (paraphrase + overview), Body (detailed description with data and comparisons), Conclusion (summarize main trend)'}
+  : '3-4 paragraphs: Overview (main trend/feature), Body 1 (detailed description with exact data), Body 2 (comparisons and contrasts), Conclusion (summary of main trend)'}
+
+${chartImage && taskType === 'Task 1' ? `
+⚠️ REMEMBER: If the chart shows specific names (cities, companies, products, etc.) - YOU MUST USE THOSE EXACT NAMES in your answer. Do NOT use "City A", "Category 1", etc.
+` : taskType === 'Task 2' ? `
+⚠️ REMEMBER: This is Task 2 (opinion/discussion essay). DO NOT describe any charts, diagrams, or visual data. Focus on argumentation and examples.
+` : ''}
 
 Write ONLY the essay now (no extra text, no title, no labels):`;
 
-    const rawResponse = await callSmartAI(prompt, 2048);
+    let rawResponse;
+
+    // ✅ IMAGE PROCESSING WITH FALLBACK
+    if (topicImage || (taskType === 'Task 1' && chartImage)) {
+      console.log('🖼️ Generating model answer with images...');
+      
+      try {
+        // TRY GEMINI FIRST
+        const imageParts = [];
+        
+        if (topicImage) {
+          const base64Data = topicImage.split(",")[1];
+          const mediaType = topicImage.split(";")[0].split(":")[1];
+          imageParts.push({
+            inline_data: { mime_type: mediaType, data: base64Data }
+          });
+        }
+        
+        // ✅ ONLY ADD CHART FOR TASK 1
+        if (taskType === 'Task 1' && chartImage) {
+          const base64Data = chartImage.split(",")[1];
+          const mediaType = chartImage.split(";")[0].split(":")[1];
+          imageParts.push({
+            inline_data: { mime_type: mediaType, data: base64Data }
+          });
+        }
+
+        console.log('🤖 [1/2] Trying Gemini with images...');
+
+        const response = await fetch(GEMINI_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  ...imageParts,
+                  { text: prompt }
+                ]
+              }
+            ],
+            generationConfig: { maxOutputTokens: 2048 }
+          })
+        });
+
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error.message || 'Gemini error');
+        }
+
+        rawResponse = data.candidates[0].content.parts[0].text;
+        console.log('✅ Gemini (with images) successful!');
+        
+      } catch (geminiError) {
+        console.error('⚠️ Gemini (images) failed:', geminiError.message);
+        
+        // FALLBACK: OCR + DeepSeek/Groq
+        console.log('🔄 [2/2] Falling back to OCR + Text AI...');
+        
+        let extractedText = '';
+        
+        // ✅ ONLY USE OCR FOR TASK 1 WITH CHART
+        if (taskType === 'Task 1' && chartImage) {
+          try {
+            const base64Data = chartImage.split(",")[1];
+            const chartText = await extractTextFromImage(base64Data, 'image/png');
+            
+            extractedText += `\n\n📈 CHART DATA (extracted via OCR):
+${chartText}
+
+⚠️ CRITICAL INSTRUCTIONS FOR WRITING MODEL ANSWER:
+
+1. OCR EXTRACTION: The above text was extracted from a chart/diagram
+2. IDENTIFY KEY ELEMENTS:
+   - City/Location names (e.g., Tokyo, London, New York, Berlin)
+   - Numbers and values (temperatures, percentages, etc.)
+   - Time periods (months, years)
+   - Units of measurement (°C, %, etc.)
+
+3. USE EXACT NAMES: If you identify city names like "Tokyo, New York, Berlin, London" - USE THESE EXACT NAMES throughout your model answer. NEVER use generic labels like "City A, City B".
+
+4. LOGICAL VALUES: If OCR gives unclear numbers, use LOGICAL estimates:
+   - Tokyo summer: ~25-30°C, winter: ~5-10°C
+   - New York summer: ~25-28°C, winter: ~0-5°C
+   - London: generally mild, ~10-20°C range
+   - Berlin: ~0-25°C across the year
+
+5. WRITE MINIMUM 150-170 WORDS with this structure:
+   
+   PARAGRAPH 1 (Overview): 
+   - State what the chart shows (type of chart, time period, locations)
+   - Mention the most striking overall trend or pattern (2-3 sentences)
+   
+   PARAGRAPH 2 (Detailed description):
+   - Describe specific data points with approximate values
+   - Use EXACT city/location names from OCR
+   - Include at least 4-5 specific data comparisons (3-4 sentences)
+   
+   PARAGRAPH 3 (Comparisons & Contrasts):
+   - Compare different locations/categories
+   - Highlight similarities and differences
+   - Use advanced linking words (whereas, in contrast, similarly) (2-3 sentences)
+
+6. ADVANCED VOCABULARY: Use Band 8-9 words like:
+   - considerable, substantial, pronounced, fluctuate, exhibit
+   - notwithstanding, whereas, in contrast, considerably
+   - demonstrate, indicate, reveal, illustrate
+
+7. EXAMPLE STRUCTURE:
+   "The chart illustrates temperature variations across four major cities—Tokyo, New York, Berlin, and London—over a twelve-month period. Overall, Tokyo and New York exhibited considerably higher temperatures during summer months, reaching approximately 28°C and 26°C respectively in August, whereas Berlin and London demonstrated more moderate patterns..."
+
+IMPORTANT: Your model answer MUST be 150-170 words minimum and use EXACT names from the chart!`;
+            
+          } catch (ocrError) {
+            console.error('OCR failed for chart:', ocrError.message);
+            extractedText += `\n\n⚠️ CHART IMAGE UPLOADED BUT OCR FAILED
+
+Write a high-quality Band 8-9 Task 1 model answer based on the topic description.
+Since chart data is unavailable:
+- Use plausible data for the topic
+- Follow proper Task 1 structure (overview + detailed paragraphs)
+- Write 150-170 words
+- Use advanced vocabulary and grammar`;
+          }
+        }
+        
+        // Topic image OCR
+        if (topicImage) {
+          try {
+            const base64Data = topicImage.split(",")[1];
+            const topicText = await extractTextFromImage(base64Data, 'image/png');
+            extractedText += `\n\n📋 TOPIC (OCR extracted):\n${topicText}`;
+          } catch (ocrError) {
+            console.error('OCR failed for topic:', ocrError.message);
+          }
+        }
+        
+        const enhancedPrompt = prompt + extractedText;
+        rawResponse = await callSmartAI(enhancedPrompt, 2048);
+        console.log('✅ OCR + Text AI successful!');
+      }
+      
+    } else {
+      // ✅ Text only
+      rawResponse = await callSmartAI(prompt, 2048);
+    }
     
     // Clean response
     let modelAnswer = rawResponse
@@ -995,7 +1568,8 @@ Write ONLY the essay now (no extra text, no title, no labels):`;
     res.json({
       success: true,
       modelAnswer: modelAnswer,
-      wordCount: wordCount
+      wordCount: wordCount,
+      hasImages: !!(topicImage || (taskType === 'Task 1' && chartImage))
     });
 
   } catch (error) {
@@ -2528,9 +3102,9 @@ function extractVocabulary(content) {
   }));
 }
 
-// ============================================
-// ADVANCED VOCABULARY EXTRACTION - C1/C2 LEVEL ✅
-// ============================================
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 // ============================================
 // ADVANCED VOCABULARY EXTRACTION - IMPROVED ✅
 // ============================================
