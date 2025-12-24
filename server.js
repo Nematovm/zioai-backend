@@ -766,6 +766,221 @@ if (/biology|cell|organism|dna|gene|evolution|биология|клетка|ор
   return "general";
 }
 
+// ============================================
+// MATH OCR MODULE - server.js ga qo'shing
+// ============================================
+
+const math = require('mathjs'); // npm install mathjs
+
+// LaTeX formula parser
+async function parseLatexFormula(ocrText) {
+  try {
+    let formattedText = ocrText;
+
+    // ✅ IMPROVED PATTERN MATCHING
+    formattedText = formattedText
+      // Square roots: √x³ → \sqrt{x^3}
+      .replace(/√\s*([a-zA-Z])(\d+)/g, '\\sqrt{$1^{$2}}')
+      .replace(/√\s*([a-zA-Z0-9]+)/g, '\\sqrt{$1}')
+      
+      // Fractions with roots: √x⁴ / √x⁵ → \frac{\sqrt{x^4}}{\sqrt{x^5}}
+      .replace(/√\s*([a-zA-Z])(\d+)\s*[\/÷]\s*√\s*([a-zA-Z])(\d+)/g, 
+               '\\frac{\\sqrt{$1^{$2}}}{\\sqrt{$3^{$4}}}')
+      
+      // Complex fractions: (√x³ · ⁵√x) / (⁵√x⁴ · √x⁵)
+      .replace(/\(([^)]+)\)\s*[\/÷]\s*\(([^)]+)\)/g, '\\frac{$1}{$2}')
+      
+      // Powers: x³ → x^3
+      .replace(/([a-zA-Z])([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, (match, base, exp) => {
+        const normalExp = exp
+          .replace(/⁰/g, '0').replace(/¹/g, '1').replace(/²/g, '2')
+          .replace(/³/g, '3').replace(/⁴/g, '4').replace(/⁵/g, '5')
+          .replace(/⁶/g, '6').replace(/⁷/g, '7').replace(/⁸/g, '8')
+          .replace(/⁹/g, '9');
+        return `${base}^{${normalExp}}`;
+      })
+      
+      // Roots with index: ⁵√x → \sqrt[5]{x}
+      .replace(/([⁰¹²³⁴⁵⁶⁷⁸⁹]+)√\s*([a-zA-Z0-9]+)/g, (match, idx, val) => {
+        const normalIdx = idx
+          .replace(/⁰/g, '0').replace(/¹/g, '1').replace(/²/g, '2')
+          .replace(/³/g, '3').replace(/⁴/g, '4').replace(/⁵/g, '5');
+        return `\\sqrt[${normalIdx}]{${val}}`;
+      })
+      
+      // Multiplication: · → \cdot
+      .replace(/·/g, '\\cdot')
+      
+      // Division: : → \div
+      .replace(/:/g, '\\div');
+
+    return {
+      original: ocrText,
+      latex: formattedText,
+      readable: convertLatexToReadable(formattedText),
+      structured: parseStructuredFormula(formattedText)
+    };
+  } catch (error) {
+    console.error('LaTeX parsing error:', error);
+    return {
+      original: ocrText,
+      latex: ocrText,
+      readable: ocrText,
+      structured: null
+    };
+  }
+}
+
+// Convert LaTeX to readable text
+function convertLatexToReadable(latex) {
+  return latex
+    .replace(/\\sqrt\[(\d+)\]\{([^}]+)\}/g, '$1-root of ($2)')
+    .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1) / ($2)')
+    .replace(/\^\\{([^}]+)\}/g, '^$1')
+    .replace(/\\cdot/g, '×')
+    .replace(/\\div/g, '÷')
+    .replace(/\\times/g, '×');
+}
+
+// Parse formula structure
+function parseStructuredFormula(latex) {
+  try {
+    // Extract components
+    const numerator = latex.match(/\\frac\{([^}]+)\}/)?.[1];
+    const denominator = latex.match(/\\frac\{[^}]+\}\{([^}]+)\}/)?.[1];
+    
+    return {
+      type: numerator && denominator ? 'fraction' : 'expression',
+      numerator: numerator || null,
+      denominator: denominator || null,
+      simplified: simplifyExpression(latex)
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+// Simplify mathematical expression
+function simplifyExpression(latex) {
+  try {
+    // Use mathjs to simplify
+    // This is a placeholder - implement actual simplification
+    return latex;
+  } catch (error) {
+    return latex;
+  }
+}
+
+// ============================================
+// IMPROVED OCR FOR MATH
+// ============================================
+async function extractMathFromImage(base64Image, mediaType) {
+  try {
+    console.log('🔍 OCR: Extracting mathematical formulas...');
+    
+    const imageBuffer = Buffer.from(base64Image, 'base64');
+    
+    // Enhanced Tesseract config for math
+    const { data: { text } } = await Tesseract.recognize(
+      imageBuffer,
+      'eng',
+      {
+        logger: m => console.log('OCR Progress:', m.status),
+        tessedit_char_whitelist: '0123456789+-*/=()[]{}xyzabcXYZ√^.:÷×⁰¹²³⁴⁵⁶⁷⁸⁹·',
+        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+      }
+    );
+    
+    console.log('📝 Raw OCR text:', text);
+    
+    // Parse formulas
+    const parsed = await parseLatexFormula(text);
+    
+    console.log('✅ Parsed formula:', {
+      latex: parsed.latex,
+      readable: parsed.readable
+    });
+    
+    return parsed;
+    
+  } catch (error) {
+    console.error('❌ Math OCR error:', error);
+    throw new Error('Formulani o\'qishda xatolik. Iltimos, aniqroq rasm yuklang.');
+  }
+}
+
+// ============================================
+// UPDATE /api/fix-homework ENDPOINT
+// ============================================
+app.post("/api/fix-homework", async (req, res) => {
+  try {
+    const { homework, image, type, language = "uz" } = req.body;
+
+    if (type === "image" && image) {
+      const base64Data = image.split(",")[1];
+      const mediaType = image.split(";")[0].split(":")[1];
+      
+      // ✅ EXTRACT MATH FORMULAS
+      const mathData = await extractMathFromImage(base64Data, mediaType);
+      
+      // ✅ ENHANCED PROMPT WITH FORMULA DATA
+      const prompt = `Sen professional matematik masalalarni yechadigan AI assistantsan.
+
+📸 RASMDAGI FORMULA (OCR orqali):
+Original: ${mathData.original}
+LaTeX: ${mathData.latex}
+Readable: ${mathData.readable}
+
+🎯 VAZIFA:
+1. Formulani to'g'ri o'qiding
+2. Qadamba-qadam yechimni bering
+3. LaTeX formatda ko'rsating
+
+JAVOBNI QUYIDAGI FORMATDA BERING:
+
+**1. FORMULA:**
+\`\`\`latex
+${mathData.latex}
+\`\`\`
+
+**2. YECHIM:**
+[Qadamba-qadam yechim]
+
+**3. NATIJA:**
+[Yakuniy javob]
+
+Javobni ${language === 'uz' ? 'o\'zbek' : language === 'ru' ? 'rus' : 'ingliz'} tilida bering.`;
+
+      const rawResponse = await callSmartAI(prompt, 4096);
+      const formattedResponse = formatAIResponse(rawResponse);
+
+      res.json({
+        success: true,
+        correctedHomework: formattedResponse,
+        mathData: mathData, // ✅ Include parsed formula data
+        detectedSubject: 'math',
+        subjectEmoji: '📐'
+      });
+    } else {
+      // Handle text homework (existing code)
+      // ...
+    }
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// EXPORT MODULES
+// ============================================
+module.exports = {
+  parseLatexFormula,
+  convertLatexToReadable,
+  extractMathFromImage
+};
+
 
 // ============================================
 // WRITING CHECKER API - IELTS TASK 1/2
@@ -3043,147 +3258,6 @@ function cleanContent(content) {
   );
 }
 
-
-
-function extractVocabulary(content) {
-  // Advanced C1/C2 words to look for
-  const advancedPatterns = [
-    "sophisticated",
-    "inherent",
-    "paradigm",
-    "ambiguous",
-    "convoluted",
-    "exemplify",
-    "juxtapose",
-    "ubiquitous",
-    "meticulous",
-    "pragmatic",
-    "eloquent",
-    "resilient",
-    "phenomenon",
-    "unprecedented",
-    "compelling",
-    "intricate",
-    "profound",
-    "substantial",
-    "comprehensive",
-    "inevitable",
-    "perpetual",
-    "autonomous",
-    "cultivate",
-    "endeavor",
-    "enhance",
-    "facilitate",
-    "implement",
-    "advocate",
-    "allocate",
-    "compensate",
-  ];
-
-  const words = content.match(/\b[a-z]{7,}\b/gi) || [];
-  const uniqueWords = [...new Set(words.map((w) => w.toLowerCase()))];
-
-  // Filter advanced words
-  const filtered = uniqueWords
-    .filter((word) => {
-      return (
-        advancedPatterns.some((pattern) => word.includes(pattern)) ||
-        word.length >= 10
-      );
-    })
-    .slice(0, 20);
-
-  return filtered.map((word) => ({
-    word: word,
-    definition: `Advanced academic vocabulary word`,
-    translation_uz: `${word} (murakkab akademik so'z)`,
-    translation_ru: `${word} (сложное академическое слово)`,
-    example: `This word is commonly used in academic contexts.`,
-  }));
-}
-
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-// ============================================
-// ADVANCED VOCABULARY EXTRACTION - IMPROVED ✅
-// ============================================
-async function extractAdvancedVocabulary(content) {
-  const prompt = `Extract EXACTLY 10-15 ADVANCED vocabulary words from this text.
-
-CRITICAL RULES:
-1. Extract ONLY words that actually appear in the text
-2. Words must be C1-C2 or B2 level (sophisticated, academic, complex)
-3. Return EXACTLY the words found in the text (same spelling, same form)
-4. Maximum 15 words
-5. Each word MUST be present in the original text
-
-Focus on:
-- Academic words (e.g., sophisticated, paradigm, inherent)
-- Complex vocabulary (e.g., meticulous, pragmatic, ubiquitous)
-- Technical terms
-- Literary language
-
-IMPORTANT: Return ONLY valid JSON, no markdown, no backticks.
-
-Format:
-{
-  "vocabulary": [
-    {
-      "word": "sophisticated",
-      "definition": "Having, revealing, or involving a great deal of worldly experience and knowledge",
-      "translation_uz": "murakkab, yuqori darajadagi",
-      "translation_ru": "сложный, изощренный",
-      "example": "She has sophisticated tastes in literature"
-    }
-  ]
-}
-
-Text:
-${content.substring(0, 3000)}`;
-
-  try {
-    console.log('🔍 Extracting vocabulary using AI...');
-    
-    // ✅ Multi-API fallback system
-    const response = await callSmartAI(prompt, 2000);
-
-    // Clean response
-    let cleanJson = response
-      .replace(/```json\n?/g, "")
-      .replace(/```\n?/g, "")
-      .replace(/^[^{]*/, "")
-      .replace(/[^}]*$/, "")
-      .trim();
-
-    const data = JSON.parse(cleanJson);
-    const vocabulary = data.vocabulary || [];
-    
-    // Filter words that actually exist in the text
-    const filteredVocabulary = vocabulary.filter(vocab => {
-      const wordInText = new RegExp(`\\b${escapeRegex(vocab.word)}\\b`, 'gi').test(content);
-      if (!wordInText) {
-        console.log(`⚠️ Word "${vocab.word}" not found in text, removing...`);
-      }
-      return wordInText;
-    });
-    
-    console.log(`✅ Vocabulary extracted: ${filteredVocabulary.length}/${vocabulary.length} words validated`);
-    
-    // Limit to 15 words maximum
-    return filteredVocabulary.slice(0, 15);
-    
-  } catch (error) {
-    console.error("❌ AI vocabulary extraction error:", error);
-    console.log("🔄 Falling back to manual extraction...");
-    
-    // Fallback: manual extraction
-    return extractVocabularyManually(content);
-  }
-}
-
-
-
 // ============================================
 // MANUAL VOCABULARY EXTRACTION (FALLBACK)
 // ============================================
@@ -3365,7 +3439,145 @@ Score criteria:
   }
 });
 
-// module.exports = { loadArticlesFromPDF };
+
+
+function extractVocabulary(content) {
+  // Advanced C1/C2 words to look for
+  const advancedPatterns = [
+    "sophisticated",
+    "inherent",
+    "paradigm",
+    "ambiguous",
+    "convoluted",
+    "exemplify",
+    "juxtapose",
+    "ubiquitous",
+    "meticulous",
+    "pragmatic",
+    "eloquent",
+    "resilient",
+    "phenomenon",
+    "unprecedented",
+    "compelling",
+    "intricate",
+    "profound",
+    "substantial",
+    "comprehensive",
+    "inevitable",
+    "perpetual",
+    "autonomous",
+    "cultivate",
+    "endeavor",
+    "enhance",
+    "facilitate",
+    "implement",
+    "advocate",
+    "allocate",
+    "compensate",
+  ];
+
+  const words = content.match(/\b[a-z]{7,}\b/gi) || [];
+  const uniqueWords = [...new Set(words.map((w) => w.toLowerCase()))];
+
+  // Filter advanced words
+  const filtered = uniqueWords
+    .filter((word) => {
+      return (
+        advancedPatterns.some((pattern) => word.includes(pattern)) ||
+        word.length >= 10
+      );
+    })
+    .slice(0, 20);
+
+  return filtered.map((word) => ({
+    word: word,
+    definition: `Advanced academic vocabulary word`,
+    translation_uz: `${word} (murakkab akademik so'z)`,
+    translation_ru: `${word} (сложное академическое слово)`,
+    example: `This word is commonly used in academic contexts.`,
+  }));
+}
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+// ============================================
+// ADVANCED VOCABULARY EXTRACTION - IMPROVED ✅
+// ============================================
+async function extractAdvancedVocabulary(content) {
+  const prompt = `Extract EXACTLY 10-15 ADVANCED vocabulary words from this text.
+
+CRITICAL RULES:
+1. Extract ONLY words that actually appear in the text
+2. Words must be C1-C2 or B2 level (sophisticated, academic, complex)
+3. Return EXACTLY the words found in the text (same spelling, same form)
+4. Maximum 15 words
+5. Each word MUST be present in the original text
+
+Focus on:
+- Academic words (e.g., sophisticated, paradigm, inherent)
+- Complex vocabulary (e.g., meticulous, pragmatic, ubiquitous)
+- Technical terms
+- Literary language
+
+IMPORTANT: Return ONLY valid JSON, no markdown, no backticks.
+
+Format:
+{
+  "vocabulary": [
+    {
+      "word": "sophisticated",
+      "definition": "Having, revealing, or involving a great deal of worldly experience and knowledge",
+      "translation_uz": "murakkab, yuqori darajadagi",
+      "translation_ru": "сложный, изощренный",
+      "example": "She has sophisticated tastes in literature"
+    }
+  ]
+}
+
+Text:
+${content.substring(0, 3000)}`;
+
+  try {
+    console.log('🔍 Extracting vocabulary using AI...');
+    
+    // ✅ Multi-API fallback system
+    const response = await callSmartAI(prompt, 2000);
+
+    // Clean response
+    let cleanJson = response
+      .replace(/```json\n?/g, "")
+      .replace(/```\n?/g, "")
+      .replace(/^[^{]*/, "")
+      .replace(/[^}]*$/, "")
+      .trim();
+
+    const data = JSON.parse(cleanJson);
+    const vocabulary = data.vocabulary || [];
+    
+    // Filter words that actually exist in the text
+    const filteredVocabulary = vocabulary.filter(vocab => {
+      const wordInText = new RegExp(`\\b${escapeRegex(vocab.word)}\\b`, 'gi').test(content);
+      if (!wordInText) {
+        console.log(`⚠️ Word "${vocab.word}" not found in text, removing...`);
+      }
+      return wordInText;
+    });
+    
+    console.log(`✅ Vocabulary extracted: ${filteredVocabulary.length}/${vocabulary.length} words validated`);
+    
+    // Limit to 15 words maximum
+    return filteredVocabulary.slice(0, 15);
+    
+  } catch (error) {
+    console.error("❌ AI vocabulary extraction error:", error);
+    console.log("🔄 Falling back to manual extraction...");
+    
+    // Fallback: manual extraction
+    return extractVocabularyManually(content);
+  }
+}
+module.exports = { loadArticlesFromPDF };
 
 // ============================================
 // 404 HANDLER - ✅ OXIRGA KO'CHIRILDI
@@ -3390,8 +3602,6 @@ app.use((req, res) => {
     ],
   });
 });
-
-
 
 // ============================================
 // START SERVER
