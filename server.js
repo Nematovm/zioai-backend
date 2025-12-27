@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 3000;
 
 // Gemini API configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`;
 
 
 // Multer configuration
@@ -54,9 +54,9 @@ async function callGemini(prompt, maxTokens = 4096) {
 // ============================================
 
 // ============================================
-// DEEPSEEK API (500M token bepul) ✅
+// DEEPSEEK R1 API (with reasoning!) ✅
 // ============================================
-async function callDeepSeek(prompt, maxTokens = 4096) {
+async function callDeepSeekR1(prompt, maxTokens = 16000) {
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error("DEEPSEEK_API_KEY yo'q");
   }
@@ -68,10 +68,10 @@ async function callDeepSeek(prompt, maxTokens = 4096) {
       "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`
     },
     body: JSON.stringify({
-      model: "deepseek-chat",
+      model: "deepseek-reasoner", // ✅ R1 REASONING MODEL
       messages: [{ role: "user", content: prompt }],
       max_tokens: maxTokens,
-      temperature: 0.7
+      temperature: 0.3 // Lower = more accurate for math
     })
   });
 
@@ -81,7 +81,16 @@ async function callDeepSeek(prompt, maxTokens = 4096) {
     throw new Error(data.error.message);
   }
 
-  return data.choices[0].message.content;
+  // ✅ R1 returns REASONING + ANSWER
+  const reasoning = data.choices[0].message.reasoning_content || "";
+  const answer = data.choices[0].message.content;
+  
+  // Combine reasoning with answer for better explanations
+  if (reasoning) {
+    console.log("🧠 DeepSeek R1 reasoning:", reasoning.substring(0, 200) + "...");
+  }
+  
+  return answer; // Return just the answer (reasoning is internal)
 }
 
 // ============================================
@@ -89,64 +98,61 @@ async function callDeepSeek(prompt, maxTokens = 4096) {
 // ============================================
 const Groq = require("groq-sdk");
 
+// ============================================
+// GROQ + LLAMA 3.3 70B (BEST FREE!) ⚡
+// ============================================
 async function callGroq(prompt, maxTokens = 4096) {
   if (!process.env.GROQ_API_KEY) {
     throw new Error("GROQ_API_KEY yo'q");
   }
 
+  const Groq = require("groq-sdk");
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
   const chatCompletion = await groq.chat.completions.create({
     messages: [{ role: "user", content: prompt }],
-    model: "llama-3.3-70b-versatile",
+    model: "llama-3.3-70b-versatile", // ✅ BEST MODEL
     max_tokens: maxTokens,
-    temperature: 0.7
+    temperature: 0.2, // ✅ Lower for math accuracy
+    top_p: 0.9
   });
 
   return chatCompletion.choices[0].message.content;
 }
 
-// ============================================
-// AQLLI 3-BOSQICHLI FALLBACK SISTEMA 🧠
-// ============================================
 async function callSmartAI(prompt, maxTokens = 4096) {
-  // 🥇 BOSQICH 1: GEMINI (eng tez, rasmlar bilan ishlaydi)
-  try {
-    console.log("🤖 [1/3] Gemini ishga tushirilmoqda...");
-    const result = await callGemini(prompt, maxTokens);
-    console.log("✅ Gemini muvaffaqiyatli!");
-    return result;
-  } catch (geminiError) {
-    console.log("⚠️ Gemini ishlamadi:", geminiError.message);
-    
-    // Agar quota tugasa, keyingisiga o'tamiz
-    if (geminiError.message.includes('quota') || geminiError.message.includes('429')) {
-      console.log("📊 Gemini quota tugadi, keyingisiga o'tilmoqda...");
-    }
-  }
-
-  // 🥈 BOSQICH 2: DEEPSEEK (500M token bepul)
-  try {
-    console.log("🤖 [2/3] DeepSeek ishga tushirilmoqda...");
-    const result = await callDeepSeek(prompt, maxTokens);
-    console.log("✅ DeepSeek muvaffaqiyatli!");
-    return result;
-  } catch (deepseekError) {
-    console.log("⚠️ DeepSeek ishlamadi:", deepseekError.message);
-  }
-
-  // 🥉 BOSQICH 3: GROQ (super tezkor, cheksiz)
-  try {
-    console.log("🤖 [3/3] Groq ishga tushirilmoqda...");
+  // 🥇 PRIORITY 1: DEEPSEEK R1 (best for math + FREE!)
+  if (process.env.GROQ_API_KEY) {
+    try {
+    console.log(`🤖 [1/3] Groq ishga tushirilmoqda (${maxTokens} tokens)...`);
     const result = await callGroq(prompt, maxTokens);
     console.log("✅ Groq muvaffaqiyatli!");
     return result;
   } catch (groqError) {
     console.log("❌ Groq ishlamadi:", groqError.message);
   }
+  }
 
-  // Agar hech biri ishlamasa
-  throw new Error("⚠️ Hozirda barcha AI xizmatlari band. Iltimos, 1 daqiqadan keyin qayta urinib ko'ring.");
+  // 🥈 PRIORITY 2: GEMINI
+  try {
+    console.log(`🤖 [2/3] Gemini ishga tushirilmoqda (${maxTokens} tokens)...`);
+    const result = await callGemini(prompt, maxTokens);
+    console.log("✅ Gemini muvaffaqiyatli!");
+    return result;
+  } catch (geminiError) {
+    console.log("⚠️ Gemini ishlamadi:", geminiError.message);
+  }
+
+  // 🥉 PRIORITY 3: GROQ
+  try {
+    console.log(`🤖 [3/3] DeepSeek R1 ishga tushirilmoqda (${maxTokens} tokens)...`);
+    const result = await callDeepSeekR1(prompt, maxTokens);
+    console.log("✅ DeepSeek R1 muvaffaqiyatli!");
+    return result;
+  } catch (deepseekError) {
+    console.log("⚠️ DeepSeek R1 ishlamadi:", deepseekError.message);
+  }
+  throw new Error("⚠️ Hozirda barcha AI xizmatlari band.");
 }
 
 // ============================================
@@ -911,66 +917,164 @@ async function extractMathFromImage(base64Image, mediaType) {
 }
 
 // ============================================
-// UPDATE /api/fix-homework ENDPOINT
+// IMPROVED MATH PROMPT - CLEAN & SIMPLE ✅
 // ============================================
-app.post("/api/fix-homework", async (req, res) => {
-  try {
-    const { homework, image, type, language = "uz" } = req.body;
+function getCleanMathPrompt(mathData, language = 'uz') {
+  const prompt = `Sen professional MATEMATIKA o'qituvchisisisan.
 
-    if (type === "image" && image) {
-      const base64Data = image.split(",")[1];
-      const mediaType = image.split(";")[0].split(":")[1];
-      
-      // ✅ EXTRACT MATH FORMULAS
-      const mathData = await extractMathFromImage(base64Data, mediaType);
-      
-      // ✅ ENHANCED PROMPT WITH FORMULA DATA
-      const prompt = `Sen professional matematik masalalarni yechadigan AI assistantsan.
+📸 RASMDAGI MASALA:
+${mathData.original}
 
-📸 RASMDAGI FORMULA (OCR orqali):
-Original: ${mathData.original}
-LaTeX: ${mathData.latex}
-Readable: ${mathData.readable}
+⚠️ MUHIM QOIDALAR:
+1. Javobni ODDIY va TUSHUNARLI yoz
+2. LaTeX kod YOZMA - faqat oddiy matn
+3. Formulalarni oddiy ko'rinishda yoz: √2, x², a/b
+4. Qisqa va aniq yoz
+5. Keraksiz matematik belgilar ishlatma
 
-🎯 VAZIFA:
-1. Formulani to'g'ri o'qiding
-2. Qadamba-qadam yechimni bering
-3. LaTeX formatda ko'rsating
+📋 JAVOBNI QUYIDAGI FORMATDA BER:
 
-JAVOBNI QUYIDAGI FORMATDA BERING:
+**1. MASALA TAHLILI:**
+[1-2 jumlada masala haqida qisqa ma'lumot]
 
-**1. FORMULA:**
-\`\`\`latex
-${mathData.latex}
-\`\`\`
+**2. TO'G'RI JAVOB:**
+✅ Javob: [faqat yakuniy javob - masalan: √2/2 yoki 0.707]
 
-**2. YECHIM:**
-[Qadamba-qadam yechim]
+**3. YECHIM QADAMLARI:**
 
-**3. NATIJA:**
-[Yakuniy javob]
+🔢 QADAM 1: [Birinchi qadam - oddiy tilida]
+Natija: [bu qadamdan chiqqan natija]
 
-Javobni ${language === 'uz' ? 'o\'zbek' : language === 'ru' ? 'rus' : 'ingliz'} tilida bering.`;
+🔢 QADAM 2: [Ikkinchi qadam]
+Natija: [natija]
 
-      const rawResponse = await callSmartAI(prompt, 4096);
-      const formattedResponse = formatAIResponse(rawResponse);
+🔢 QADAM 3: [Uchinchi qadam]
+Natija: [natija]
 
-      res.json({
-        success: true,
-        correctedHomework: formattedResponse,
-        mathData: mathData, // ✅ Include parsed formula data
-        detectedSubject: 'math',
-        subjectEmoji: '📐'
-      });
-    } else {
-      // Handle text homework (existing code)
-      // ...
+[3-5 ta qadam yetarli - ortiqcha uzaytirma!]
+
+**4. XULOSA:**
+🎯 Yakuniy javob: [aniq javob]
+
+**5. MASLAHAT:**
+💡 [1-2 ta qisqa maslahat]
+
+⚠️ ESLATMA:
+- LaTeX kod yozma (\\frac, \\sqrt, etc.)
+- Faqat oddiy matn: √2, x², a/b
+- Qisqa va lo'nda yoz
+- Keraksiz matematik belgilar yozma
+- 3-5 qadam yetarli
+
+⚠️ JAVOBNI FAQAT O'ZBEK TILIDA YOZ! 🇺🇿`;
+
+  return prompt;
+}
+
+// ============================================
+// CLEAN AI RESPONSE - REMOVE LATEX JUNK ✅
+// ============================================
+function cleanMathResponse(rawResponse) {
+  let cleaned = rawResponse;
+  
+  // ✅ REMOVE ALL LaTeX COMMANDS
+  cleaned = cleaned
+    // Remove LaTeX fractions: \frac{a}{b} → a/b
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)')
+    
+    // Remove LaTeX sqrt: \sqrt{x} → √x
+    .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
+    .replace(/\\sqrt\[(\d+)\]\{([^}]+)\}/g, '$1√($2)')
+    
+    // Remove LaTeX powers: x^{2} → x²
+    .replace(/\^\{(\d+)\}/g, (match, num) => {
+      const superscripts = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+      return num.split('').map(d => superscripts[d] || d).join('');
+    })
+    
+    // Remove other LaTeX commands
+    .replace(/\\cdot/g, '×')
+    .replace(/\\times/g, '×')
+    .replace(/\\div/g, '÷')
+    .replace(/\\pm/g, '±')
+    .replace(/\\approx/g, '≈')
+    .replace(/\\leq/g, '≤')
+    .replace(/\\geq/g, '≥')
+    .replace(/\\neq/g, '≠')
+    
+    // Remove LaTeX blocks: \(...\) or $$...$$
+    .replace(/\\\[[\s\S]*?\\\]/g, '')
+    .replace(/\$\$[\s\S]*?\$\$/g, '')
+    .replace(/\\\([\s\S]*?\\\)/g, '')
+    
+    // Remove LaTeX text commands
+    .replace(/\\text\{([^}]+)\}/g, '$1')
+    .replace(/\\mathbf\{([^}]+)\}/g, '$1')
+    .replace(/\\mathrm\{([^}]+)\}/g, '$1')
+    
+    // Remove remaining backslashes
+    .replace(/\\(?![√×÷±≈≤≥≠])/g, '')
+    
+    // Clean up multiple spaces and newlines
+    .replace(/\s{3,}/g, '  ')
+    .replace(/\n{3,}/g, '\n\n')
+    
+    // Remove empty LaTeX remnants
+    .replace(/\{\s*\}/g, '')
+    .replace(/\(\s*\)/g, '')
+    
+    // ✅ REMOVE ITALIAN/LATIN MATH TERMS
+    .replace(/Butalo'g'ri\./gi, '')
+    .replace(/Shundayqilib,/gi, '')
+    .replace(/Shungao'xshash,/gi, '')
+    .replace(/Endiburunito'g'riyechishusulini/gi, '')
+    .replace(/Masalan,/gi, 'Masalan:')
+    .replace(/maxrajniratsionallashtirish/gi, 'maxrajni ratsionallashtirish')
+    .replace(/dangulqigarishdanoldin/gi, '')
+    
+    // ✅ FIX COMMON OCR MISTAKES
+    .replace(/\s+va\s+3-2/g, ' va √(3-2')
+    .replace(/nitekshiramiz/g, 'ni tekshiramiz')
+    .replace(/bo'lsa,undaqayerdaxato/g, "bo'lsa, qayerda xato")
+    .replace(/Keling,yanabrirusulnisina/g, "Keling, boshqa usulni sinab")
+    
+    .trim();
+  
+  return cleaned;
+}
+
+
+
+
+// ============================================
+// HELPER: Get Standard Prompts ✅
+// ============================================
+function getStandardPrompts(language) {
+  const prompts = {
+    uz: {
+      instruction: "Sen professional o'qituvchisisisan.",
+      sections: `📋 JAVOBINGIZDA QUYIDAGILARNI YOZING:
+
+**1. TEKSHIRISH NATIJASI:**
+Vazifa to'g'ri yoki noto'g'ri.
+
+**2. TO'G'RI JAVOB:**
+❓ Savol: [Savolni takrorla]
+✅ Javob: [To'g'ri javob]
+
+**3. YECHIM:**
+Qadam-ba-qadam tushuntirish (3-5 qadam).
+
+**4. MASLAHAT:**
+Yaxshilash uchun tavsiya.
+
+⚠️ JAVOBNI ODDIY VA QISQA YOZ!
+⚠️ LaTeX kod yozma - faqat oddiy matn!`
     }
-  } catch (error) {
-    console.error('❌ Error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+  };
+  
+  return prompts;
+}
 
 // ============================================
 // EXPORT MODULES
