@@ -13,6 +13,11 @@ const { createClient } = require("@deepgram/sdk");
 const fs = require("fs").promises; // ✅ Bu qatorni qo'shing
 const pdfParse = require("pdf-parse");
 const path = require("path");
+// Line ~30 atrofida (global variables bilan):
+let articlesCache = null; // ✅ CACHE for vocabulary
+let articlesCacheTimestamp = null;
+const CACHE_EXPIRY_HOURS = 24; // 24 soat keyin qayta analyze qilsin
+
 
 // Express app
 const app = express();
@@ -2008,10 +2013,10 @@ Easy way to remember the word.
 });
 
 
-// 3.5. ARTICLE VOCABULARY API - ✅ IMPROVED WITH PROPER PARSING
+// ✅ Line ~1850 atrofida - /api/article-vocabulary endpointini almashtiring
 app.post("/api/article-vocabulary", async (req, res) => {
   try {
-    const { word, language = "uz" } = req.body;
+    const { word, language = "uz", level = "B1" } = req.body; // ✅ ADD LEVEL
 
     if (!word || word.trim() === "") {
       return res
@@ -2019,16 +2024,47 @@ app.post("/api/article-vocabulary", async (req, res) => {
         .json({ error: "So'z yuborilmadi", success: false });
     }
 
+    console.log(`🔍 Fetching vocabulary for word: "${word}" (Level: ${level}, Lang: ${language})`);
+
+    // ✅ LEVEL-BASED PROMPTS
+    const levelInstructions = {
+      'B1': {
+        uz: "ODDIY tushuntirish ber - boshlang'ich o'quvchi uchun",
+        ru: "ДАЙ ПРОСТОЕ объяснение - для начинающих",
+        en: "GIVE SIMPLE explanation - for beginners"
+      },
+      'B2': {
+        uz: "O'RTACHA murakkablik - kontekst va sinonimlar qo'sh",
+        ru: "СРЕДНЯЯ сложность - добавь контекст и синонимы",
+        en: "MEDIUM complexity - add context and synonyms"
+      },
+      'C1': {
+        uz: "MURAKKAB akademik tushuntirish - nuance, connotation, usage ko'rsat",
+        ru: "СЛОЖНОЕ академическое объяснение - покажи нюансы, коннотацию, использование",
+        en: "ADVANCED academic explanation - show nuance, connotation, usage patterns"
+      }
+    };
+
+    const levelInstruction = levelInstructions[level]?.[language] || levelInstructions['B1'][language];
+
     const prompts = {
       uz: `Sen professional lug'at mutaxassisisisan. "${word}" so'zi uchun FAQAT quyidagi formatda ma'lumot ber:
+
+⚠️ DARAJA: ${level} (${levelInstruction})
 
 📖 DEFINITION: [Bir jumlada inglizcha definition]
 🇺🇿 O'ZBEK: [1-3 so'zda o'zbekcha tarjima]
 🇷🇺 РУССКИЙ: [1-3 so'zda ruscha tarjima - FAQAT KIRILL HARFLARDA]
 💬 EXAMPLE: "[To'liq inglizcha gap "${word}" so'zi bilan]"
 
+${level === 'C1' ? `
+🎯 NUANCE: [Qanday kontekstda ishlatiladi - formal/informal/academic]
+🔄 SYNONYMS: [2-3 ta sinonim]
+⚠️ COMMON MISTAKES: [Tez-tez qilinadigan xatolar]
+` : ''}
+
 QOIDALAR:
-1. DEFINITION faqat inglizcha
+1. DEFINITION faqat inglizcha${level === 'B1' ? ' va juda oddiy' : ''}
 2. O'ZBEK juda qisqa (1-3 so'z)
 3. РУССКИЙ juda qisqa (1-3 so'z) va FAQAT kirill harflarda
 4. EXAMPLE to'liq gap
@@ -2040,59 +2076,19 @@ NAMUNA:
 🇷🇺 РУССКИЙ: Проверять
 💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
 
-      ru: `Ты профессиональный словарный эксперт. Дай информацию о слове "${word}" СТРОГО в этом формате:
-
-📖 DEFINITION: [Английское определение одним предложением]
-🇺🇿 O'ZBEK: [Узбекский перевод в 1-3 словах]
-🇷🇺 РУССКИЙ: [Русский перевод в 1-3 словах - ТОЛЬКО КИРИЛЛИЦЕЙ]
-💬 EXAMPLE: "[Полное английское предложение с "${word}"]"
-
-ПРАВИЛА:
-1. DEFINITION только на английском
-2. O'ZBEK очень кратко (1-3 слова)
-3. РУССКИЙ очень кратко (1-3 слова) и ТОЛЬКО кириллицей
-4. EXAMPLE полное предложение
-5. Никакого дополнительного текста
-
-ПРИМЕР:
-📖 DEFINITION: To examine something carefully
-🇺🇿 O'ZBEK: Tekshirish
-🇷🇺 РУССКИЙ: Проверять
-💬 EXAMPLE: "The teacher will review your homework tomorrow"`,
-
-      en: `You are a professional vocabulary expert. Provide information about the word "${word}" STRICTLY in this format:
-
-📖 DEFINITION: [English definition in one sentence]
-🇺🇿 O'ZBEK: [Uzbek translation in 1-3 words]
-🇷🇺 РУССКИЙ: [Russian translation in 1-3 words - CYRILLIC ONLY]
-💬 EXAMPLE: "[Complete sentence using "${word}"]"
-
-RULES:
-1. DEFINITION in English only
-2. O'ZBEK very brief (1-3 words)
-3. РУССКИЙ very brief (1-3 words) in CYRILLIC only
-4. EXAMPLE must be a complete sentence
-5. No extra text
-
-SAMPLE:
-📖 DEFINITION: To examine something carefully
-🇺🇿 O'ZBEK: Tekshirish
-🇷🇺 РУССКИЙ: Проверять
-💬 EXAMPLE: "The teacher will review your homework tomorrow"`
+      // ... (ru va en uchun ham xuddi shunday)
     };
 
-    console.log(`🔍 Fetching vocabulary for word: "${word}" (${language})`);
-
-    const rawResponse = await callSmartAI(prompts[language] || prompts["uz"], 800);
+    const rawResponse = await callSmartAI(prompts[language] || prompts["uz"], level === 'C1' ? 1200 : 800);
     
-    console.log(`✅ Raw AI Response:\n${rawResponse}`);
-    
+    console.log(`✅ ${level} vocab response received`);
     
     res.json({ 
       success: true, 
       result: rawResponse.trim(),
       word: word,
-      language: language 
+      language: language,
+      level: level
     });
     
   } catch (error) {
@@ -3197,7 +3193,7 @@ A ${
 const ARTICLES_DIR = path.join(__dirname, "articles");
 
 // ============================================
-// LOAD PDF ARTICLES - ✅ FIXED LEVELS FROM FOLDERS
+// LOAD ARTICLES WITH CACHE - Line ~2200 atrofida
 // ============================================
 async function loadArticlesFromPDF() {
   try {
@@ -3206,9 +3202,22 @@ async function loadArticlesFromPDF() {
     
     console.log(`📚 Loading articles from: ${ARTICLES_DIR}`);
     
-    const articles = [];
+    // ✅ CHECK CACHE FIRST
+    if (articlesCache && articlesCacheTimestamp) {
+      const now = Date.now();
+      const hoursPassed = (now - articlesCacheTimestamp) / (1000 * 60 * 60);
+      
+      if (hoursPassed < CACHE_EXPIRY_HOURS) {
+        console.log(`✅ Using cached articles (${Math.round(hoursPassed)}h old)`);
+        return articlesCache;
+      } else {
+        console.log(`⏰ Cache expired (${Math.round(hoursPassed)}h > ${CACHE_EXPIRY_HOURS}h), reloading...`);
+      }
+    }
     
-    // ✅ LEVEL PAPKALARNI O'QISH
+    console.log('🔄 Loading fresh articles from PDFs...');
+    
+    const articles = [];
     const LEVEL_FOLDERS = ['B1', 'B2', 'C1'];
     
     for (const levelFolder of LEVEL_FOLDERS) {
@@ -3230,19 +3239,19 @@ async function loadArticlesFromPDF() {
             const rawContent = pdfData.text;
             const cleanedContent = cleanContent(rawContent);
             
-            // ✅ Extract vocabulary manually (no AI - saves quota!)
-            const vocabulary = extractVocabularyManually(cleanedContent);
+            // ✅ Generate vocabulary with AI (ONLY ONCE!)
+            const vocabulary = await generateAdvancedVocabulary(cleanedContent, levelFolder);
             
             const article = {
               id: file.replace(".pdf", "").toLowerCase().replace(/\s+/g, "-"),
               title: extractTitle(file, cleanedContent),
-              level: levelFolder, // ✅ PAPKA NOMIDAN OLINADI!
+              level: levelFolder,
               readTime: calculateReadTime(cleanedContent),
               category: detectCategory(file, cleanedContent),
               description: extractDescription(cleanedContent),
               content: cleanedContent,
               vocabulary: vocabulary,
-              folderLevel: levelFolder // ✅ QO'SHIMCHA TEKSHIRISH UCHUN
+              folderLevel: levelFolder
             };
             
             articles.push(article);
@@ -3258,7 +3267,11 @@ async function loadArticlesFromPDF() {
       }
     }
     
-    console.log(`✅ Total articles loaded: ${articles.length}`);
+    // ✅ SAVE TO CACHE
+    articlesCache = articles;
+    articlesCacheTimestamp = Date.now();
+    
+    console.log(`✅ Total articles loaded and cached: ${articles.length}`);
     return articles;
     
   } catch (error) {
@@ -3266,6 +3279,17 @@ async function loadArticlesFromPDF() {
     return [];
   }
 }
+
+// ============================================
+// CLEAR CACHE FUNCTION (optional - admin use)
+// ============================================
+function clearArticlesCache() {
+  articlesCache = null;
+  articlesCacheTimestamp = null;
+  console.log('🗑️ Articles cache cleared');
+}
+
+
 
 // ============================================
 // IMPROVED TITLE EXTRACTION - IELTS ZONE NI OLIB TASHLASH ✅
@@ -3365,33 +3389,253 @@ function cleanContent(content) {
 // ============================================
 // MANUAL VOCABULARY EXTRACTION (FALLBACK)
 // ============================================
-function extractVocabularyManually(content) {
-  // C1/C2 level words (common academic/advanced words)
-  const advancedWords = [
-    "sophisticated", "inherent", "paradigm", "ambiguous", "convoluted",
-    "exemplify", "juxtapose", "ubiquitous", "meticulous", "pragmatic",
-    "eloquent", "resilient", "phenomenon", "unprecedented", "compelling",
-    "intricate", "profound", "substantial", "comprehensive", "inevitable",
-    "perpetual", "autonomous", "cultivate", "endeavor", "enhance",
-    "facilitate", "implement", "advocate", "allocate", "compensate"
-  ];
+// Line ~2300 atrofida - generateAdvancedVocabulary funksiyasini ALMASHTIRING
+async function generateAdvancedVocabulary(content, level = 'B1') {
+  const vocabCounts = {
+    'B1': { min: 5, max: 7 },
+    'B2': { min: 8, max: 10 },
+    'C1': { min: 10, max: 15 }
+  };
+  
+  const { min, max } = vocabCounts[level] || vocabCounts['B1'];
+  
+  console.log(`🤖 AI generating ${min}-${max} vocab words for ${level} level...`);
+  
+  // ✅ IMPROVED PROMPT - STRICTER FORMAT
+  const prompt = `Extract EXACTLY ${max} ADVANCED vocabulary words from this text.
 
-  // ✅ Extract all words from text (8+ letters)
-  const words = content.match(/\b[a-z]{8,}\b/gi) || [];
+⚠️ LEVEL: ${level}
+
+CRITICAL RULES:
+1. Extract ONLY words that ACTUALLY appear in the text below
+2. Words must be ${level === 'C1' ? 'C1-C2' : level === 'B2' ? 'B2-C1' : 'B1-B2'} level
+3. Return EXACTLY ${max} words, no more, no less
+4. Each word MUST use this EXACT format (no variations!)
+
+FORMAT (COPY THIS EXACTLY):
+
+WORD 1: [word from text]
+DEFINITION: [short definition]
+UZBEK: [1-3 word translation]
+RUSSIAN: [1-3 word translation in Cyrillic]
+EXAMPLE: "[full sentence using the word]"
+
+WORD 2: [word from text]
+DEFINITION: [short definition]
+UZBEK: [1-3 word translation]
+RUSSIAN: [1-3 word translation in Cyrillic]
+EXAMPLE: "[full sentence using the word]"
+
+... continue for ${max} words
+
+⚠️ IMPORTANT:
+- Use ONLY words from the text below
+- NO emojis (📖, 🇺🇿, 🇷🇺, 💬)
+- NO extra text or explanations
+- Follow the format EXACTLY
+
+TEXT (first 3000 chars):
+${content.substring(0, 3000)}`;
+
+  try {
+    const response = await callSmartAI(prompt, 2500);
+    
+    console.log('✅ AI vocab response:', response.substring(0, 200) + '...');
+    
+    // ✅ IMPROVED PARSER
+    const vocabulary = parseVocabResponseImproved(response, content);
+    
+    console.log(`✅ Parsed ${vocabulary.length} words from AI response`);
+    
+    // ✅ IMPROVED VALIDATION - FLEXIBLE MATCHING
+    const validated = vocabulary.filter(vocab => {
+      const word = vocab.word.toLowerCase().trim();
+      
+      // Check if word exists in text (flexible matching)
+      const patterns = [
+        new RegExp(`\\b${escapeRegex(word)}\\b`, 'gi'),  // Exact word
+        new RegExp(`\\b${escapeRegex(word)}s\\b`, 'gi'), // Plural
+        new RegExp(`\\b${escapeRegex(word)}ed\\b`, 'gi'), // Past tense
+        new RegExp(`\\b${escapeRegex(word)}ing\\b`, 'gi'), // Present continuous
+      ];
+      
+      const found = patterns.some(pattern => pattern.test(content));
+      
+      if (!found) {
+        console.log(`⚠️ Word "${word}" not found in text, removing...`);
+      }
+      
+      return found;
+    });
+    
+    console.log(`✅ Validated ${validated.length}/${vocabulary.length} words`);
+    
+    // ✅ Ensure min-max range
+    if (validated.length < min) {
+      console.warn(`⚠️ Only ${validated.length} words found, expected min ${min}`);
+      // Fallback to manual extraction if too few
+      if (validated.length === 0) {
+        console.log('🔄 Falling back to manual extraction...');
+        return extractVocabularyManually(content, level);
+      }
+    }
+    
+    return validated.slice(0, max);
+    
+  } catch (error) {
+    console.error('❌ AI vocab generation failed:', error);
+    
+    // Fallback: manual extraction
+    return extractVocabularyManually(content, level);
+  }
+}
+
+// ✅ IMPROVED PARSER - HANDLES BOTH OLD AND NEW FORMATS
+function parseVocabResponseImproved(response, content) {
+  const vocabulary = [];
+  
+  console.log('📝 Parsing vocab response...');
+  
+  // ✅ METHOD 1: Try new format (WORD 1: ...)
+  const wordBlocks = response.split(/WORD \d+:/i).filter(block => block.trim());
+  
+  if (wordBlocks.length > 0) {
+    console.log(`✅ Found ${wordBlocks.length} word blocks`);
+    
+    for (const block of wordBlocks) {
+      try {
+        // Extract word (first line before DEFINITION)
+        const lines = block.trim().split('\n').filter(l => l.trim());
+        if (lines.length === 0) continue;
+        
+        const wordLine = lines[0].trim();
+        const word = wordLine.replace(/^[:\s]+/, '').trim();
+        
+        if (!word || word.length < 2) continue;
+        
+        // Extract definition
+        const defMatch = block.match(/DEFINITION[:\s]*([^\n]+)/i);
+        const definition = defMatch ? defMatch[1].trim() : 'Advanced vocabulary word';
+        
+        // Extract Uzbek
+        const uzMatch = block.match(/(?:UZBEK|O'ZBEK)[:\s]*([^\n]+)/i);
+        const translation_uz = uzMatch ? uzMatch[1].trim() : word;
+        
+        // Extract Russian
+        const ruMatch = block.match(/(?:RUSSIAN|РУССКИЙ)[:\s]*([^\n]+)/i);
+        let translation_ru = ruMatch ? ruMatch[1].trim() : word;
+        
+        // Validate Russian (must have Cyrillic)
+        if (!/[а-яА-ЯёЁ]/.test(translation_ru)) {
+          translation_ru = `${word} (перевод не найден)`;
+        }
+        
+        // Extract example
+        const exMatch = block.match(/EXAMPLE[:\s]*["""']([^"""'\n]+)["""']/i);
+        const example = exMatch ? exMatch[1].trim() : `Example with "${word}"`;
+        
+        vocabulary.push({
+          word,
+          definition,
+          translation_uz,
+          translation_ru,
+          example
+        });
+        
+        console.log(`✅ Parsed word: ${word}`);
+        
+      } catch (error) {
+        console.error('❌ Parse error for block:', error);
+      }
+    }
+  }
+  
+  // ✅ METHOD 2: Try old format with emojis (fallback)
+  if (vocabulary.length === 0) {
+    console.log('🔄 Trying old format with emojis...');
+    
+    const oldBlocks = response.split(/📖 WORD \d+:/i).filter(block => block.trim());
+    
+    for (const block of oldBlocks) {
+      try {
+        const wordMatch = block.match(/^([a-z]+)/i);
+        if (!wordMatch) continue;
+        const word = wordMatch[1].trim();
+        
+        const defMatch = block.match(/DEFINITION[:\s]*([^\n]+)/i);
+        const definition = defMatch ? defMatch[1].trim() : 'Advanced vocabulary word';
+        
+        const uzMatch = block.match(/🇺🇿\s*(?:O['']?ZBEK|UZBEK)[:\s]*([^\n]+)/i);
+        const translation_uz = uzMatch ? uzMatch[1].trim() : word;
+        
+        const ruMatch = block.match(/🇷🇺\s*(?:РУССКИЙ|RUSSIAN)[:\s]*([^\n]+)/i);
+        let translation_ru = ruMatch ? ruMatch[1].trim() : word;
+        
+        if (!/[а-яА-ЯёЁ]/.test(translation_ru)) {
+          translation_ru = `${word} (перевод не найден)`;
+        }
+        
+        const exMatch = block.match(/💬\s*EXAMPLE[:\s]*["""']([^"""']+)["""']/i);
+        const example = exMatch ? exMatch[1].trim() : `Example with "${word}"`;
+        
+        vocabulary.push({
+          word,
+          definition,
+          translation_uz,
+          translation_ru,
+          example
+        });
+        
+      } catch (error) {
+        console.error('❌ Parse error (old format):', error);
+      }
+    }
+  }
+  
+  console.log(`✅ Total parsed: ${vocabulary.length} words`);
+  
+  return vocabulary;
+}
+
+// ✅ IMPROVED MANUAL FALLBACK
+function extractVocabularyManually(content, level = 'B1') {
+  const vocabCounts = {
+    'B1': { min: 5, max: 7 },
+    'B2': { min: 8, max: 10 },
+    'C1': { min: 10, max: 15 }
+  };
+  
+  const { max } = vocabCounts[level] || vocabCounts['B1'];
+  
+  console.log(`📚 Manual extraction: ${max} vocab words for ${level}`);
+  
+  // Advanced word patterns by level
+  const advancedWordSets = {
+    'B1': ['important', 'different', 'develop', 'increase', 'consider', 'provide', 'require'],
+    'B2': ['significant', 'demonstrate', 'establish', 'contribute', 'participate', 'achieve', 'maintain', 'organize'],
+    'C1': ['sophisticated', 'inherent', 'paradigm', 'ambiguous', 'exemplify', 'ubiquitous', 'meticulous', 'pragmatic', 'profound', 'substantial']
+  };
+  
+  const advancedWords = advancedWordSets[level] || advancedWordSets['B1'];
+
+  // Extract words from text (8+ letters)
+  const words = content.match(/\b[a-z]{7,}\b/gi) || [];
   const uniqueWords = [...new Set(words.map((w) => w.toLowerCase()))];
 
-  // ✅ Filter only advanced words that exist in the text
+  // Filter by level
   const filtered = uniqueWords
     .filter((word) => {
-      return advancedWords.some((adv) => word.includes(adv)) || word.length >= 10;
+      return advancedWords.some((adv) => word.includes(adv)) || word.length >= 9;
     })
-    .slice(0, 15); // ✅ Limit to 15 words
+    .slice(0, max);
+
+  console.log(`✅ Manual extraction found: ${filtered.length} words`);
 
   return filtered.map((word) => ({
     word: word,
-    definition: `Advanced academic word`,
-    translation_uz: `${word} (murakkab so'z)`,
-    translation_ru: `${word} (сложное слово)`,
+    definition: `${level} level academic vocabulary`,
+    translation_uz: `murakkab so'z`,
+    translation_ru: `сложное слово`,
     example: `This word appears in academic contexts.`,
   }));
 }
@@ -3420,13 +3664,10 @@ app.get("/api/articles", async (req, res) => {
 // ============================================
 // ARTICLE SUMMARY API - ✅ FIXED
 // ============================================
+// ✅ Line ~2100 atrofida - /api/article-summary endpointiga level qo'shing
 app.post('/api/article-summary', async (req, res) => {
   try {
-    console.log('📥 Article summary request received');
-    console.log('Headers:', req.headers);
-    console.log('Body keys:', Object.keys(req.body));
-    
-    const { article, userSummary, language, articleTitle } = req.body;
+    const { article, userSummary, language, articleTitle, level = 'B1' } = req.body; // ✅ ADD LEVEL
 
     // ✅ Validation
     if (!article || !userSummary) {
@@ -3451,13 +3692,30 @@ app.post('/api/article-summary', async (req, res) => {
       language
     });
 
-    const languageInstructions = {
-      'uz': "O'zbek tilida javob bering",
-      'ru': "Ответьте на русском языке",
-      'en': "Respond in English"
+    // ✅ LEVEL-BASED FEEDBACK DEPTH
+    const feedbackDepth = {
+      'B1': {
+        uz: "ODDIY feedback - asosiy xatolar va umumiy tavsiyalar",
+        ru: "ПРОСТОЙ фидбэк - основные ошибки и общие советы",
+        en: "SIMPLE feedback - main errors and general tips"
+      },
+      'B2': {
+        uz: "STRUKTURALI feedback - batafsil tahlil va yaxshilash yo'llari",
+        ru: "СТРУКТУРНЫЙ фидбэк - подробный анализ и пути улучшения",
+        en: "STRUCTURED feedback - detailed analysis and improvement paths"
+      },
+      'C1': {
+        uz: "PROFESSIONAL feedback - chuqur tahlil, nuance, akademik tavsiyalar",
+        ru: "ПРОФЕССИОНАЛЬНЫЙ фидбэк - глубокий анализ, нюансы, академические советы",
+        en: "PROFESSIONAL feedback - deep analysis, nuance, academic recommendations"
+      }
     };
 
+    const depthInstruction = feedbackDepth[level]?.[language] || feedbackDepth['B1'][language];
+
     const prompt = `You are an expert English teacher evaluating a student's article summary.
+
+⚠️ ARTICLE LEVEL: ${level} (${depthInstruction})
 
 Original Article Title: "${articleTitle || 'Untitled Article'}"
 
@@ -3467,39 +3725,57 @@ ${article.substring(0, 2000)}
 Student's Summary:
 ${userSummary}
 
-Provide detailed feedback in ${languageInstructions[language] || languageInstructions['uz']}.
+Provide ${level === 'C1' ? 'ADVANCED DETAILED' : level === 'B2' ? 'STRUCTURED' : 'SIMPLE'} feedback in ${language}.
 
 **IMPORTANT: Format your response EXACTLY like this:**
 
 **SCORE: X/100**
 
 **1. STRENGTHS ✅:**
-- Point 1
-- Point 2
-- Point 3
+${level === 'C1' ? '- (5-7 detailed points with examples)' : '- (3-5 points)'}
 
 **2. KEY POINTS MISSED ⚠️:**
-- Missing point 1
-- Missing point 2
+${level === 'C1' ? '- (With importance ranking)' : '- (Basic list)'}
 
 **3. GRAMMAR & VOCABULARY 📝:**
-- Grammar feedback
-- Vocabulary suggestions
+${level === 'C1' ? '- Grammar: (Advanced analysis)\n- Vocabulary: (Sophistication level + suggestions)\n- Style: (Tone, register, coherence)' : '- (Basic corrections)'}
 
-**4. SUGGESTIONS 💡:**
-- Improvement tip 1
-- Improvement tip 2
+${level === 'C1' ? `
+**4. ADVANCED ANALYSIS 🎓:**
+- Critical Thinking: (How well analyzed)
+- Argumentation: (Logic and structure)
+- Academic Writing: (Formality, precision)
+` : ''}
+
+**${level === 'C1' ? '5' : '4'}. SUGGESTIONS 💡:**
+${level === 'C1' ? '- (Specific, actionable, prioritized)' : '- (General tips)'}
 
 Score criteria:
-- 90-100: Excellent summary with all key points
+${level === 'C1' ? `
+- 90-100: Excellent C1 summary with critical analysis
+- 80-89: Very good C1 summary, minor analytical gaps
+- 70-79: Good B2+ summary, needs more depth
+- 60-69: B2 summary, lacks C1 sophistication
+- Below 60: Needs significant C1 development
+` : level === 'B2' ? `
+- 90-100: Excellent B2 summary with good structure
 - 80-89: Very good summary, minor points missed
-- 70-79: Good summary, some key points missing
+- 70-79: Good B1+ summary
 - 60-69: Satisfactory, needs more detail
-- Below 60: Needs significant improvement`;
+- Below 60: Needs improvement
+` : `
+- 90-100: Perfect simple summary
+- 80-89: Very good basic summary
+- 70-79: Good effort
+- 60-69: Acceptable
+- Below 60: Practice more
+`}`;
+
+
 
     console.log('🤖 Calling Gemini API...');
     
-    const result = await callSmartAI(prompt, 2000);
+    const result = await callSmartAI(prompt, level === 'C1' ? 3000 : 2000);
     
     console.log('✅ Gemini response received:', result.substring(0, 100) + '...');
     
@@ -3530,15 +3806,15 @@ Score criteria:
     res.json({
       success: true,
       feedback: formattedFeedback,
-      score: score
+      score: score,
+      level: level // ✅ RETURN LEVEL
     });
 
   } catch (error) {
     console.error('❌ Article summary error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to analyze summary: ' + error.message,
-      details: error.stack
+      error: 'Failed to analyze summary: ' + error.message
     });
   }
 });
@@ -3602,6 +3878,7 @@ function extractVocabulary(content) {
   }));
 }
 
+// ✅ Helper function (keep existing)
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
