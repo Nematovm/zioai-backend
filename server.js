@@ -283,10 +283,12 @@ async function callGeminiWithImage(prompt, base64Image, mediaType) {
   return data.candidates[0].content.parts[0].text;
 }
 
-// CORS MIDDLEWARE
+// CORS MIDDLEWARE - FIXED ✅
 app.use(
   cors({
     origin: [
+      "https://ziyo-ai.uz",              // ✅ PRODUCTION DOMAIN
+      "https://www.ziyo-ai.uz",          // ✅ WWW VERSION
       "https://zioai-frontend.onrender.com",
       "http://localhost:3000",
       "http://127.0.0.1:5500",
@@ -301,6 +303,7 @@ app.use(
 app.options("*", cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
 
 // HELPER FUNCTION - TEXT FORMATTING
 function formatAIResponse(text) {
