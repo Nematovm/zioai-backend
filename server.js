@@ -3241,6 +3241,10 @@ async function loadArticlesFromPDF() {
             
             const rawContent = pdfData.text;
             const cleanedContent = cleanContent(rawContent);
+            if (cleanedContent.includes('">') || cleanedContent.includes('"&gt;')) {
+  console.warn(`⚠️ ${file} still has HTML artifacts after cleaning!`);
+  console.log('First 200 chars:', cleanedContent.substring(0, 200));
+}
             
             // ✅ Generate vocabulary with AI (ONLY ONCE!)
             const vocabulary = await generateAdvancedVocabulary(cleanedContent, levelFolder);
@@ -3295,32 +3299,47 @@ function clearArticlesCache() {
 
 
 // ============================================
-// IMPROVED TITLE EXTRACTION - IELTS ZONE NI OLIB TASHLASH ✅
+// IMPROVED TITLE EXTRACTION - CLEANER ✅
 // ============================================
 function extractTitle(filename, content) {
-  // Clean content first
+  // ✅ STEP 1: Clean content more aggressively
   let cleanedContent = content
-    .replace(/IELTS\s+ZONE\s*#?\s*\w+/gi, "") // Remove IELTS ZONE
-    .replace(/@\w+/g, "") // Remove usernames
-    .replace(/\d{2,3}-\d{2,3}-\d{2,3}-\d{2,3}/g, "") // Remove phone numbers
+    .replace(/IELTS\s+ZONE\s*#?\s*\w+/gi, "")
+    .replace(/@\w+/g, "")
+    .replace(/\d{2,3}-\d{2,3}-\d{2,3}-\d{2,3}/g, "")
+    .replace(/[a-z\s,\-]+["']\s*>/gi, ' ') // ✅ Remove tooltip artifacts
+    .replace(/["']\s*>/g, ' ')
     .trim();
 
-  // Get first meaningful line as title
+  // ✅ STEP 2: Get first clean line as title
   const lines = cleanedContent
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l.length > 10 && l.length < 100); // Reasonable title length
+    .filter((l) => {
+      // Valid title: 10-100 chars, starts with letter, has spaces
+      return l.length > 10 && 
+             l.length < 100 && 
+             /^[A-Z]/.test(l) &&
+             /\s/.test(l) &&
+             !/^\d/.test(l); // Not starting with number
+    });
 
   if (lines.length > 0) {
-    return lines[0];
+    return lines[0]
+      .replace(/["'>]/g, '') // Remove remaining quotes/brackets
+      .trim();
   }
 
-  // Fallback: use filename
+  // ✅ STEP 3: Fallback - clean filename
   return filename
     .replace(".pdf", "")
     .replace(/-/g, " ")
     .replace(/\d+/g, "")
-    .trim();
+    .replace(/[_]/g, " ")
+    .trim()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 function detectLevel(content) {
@@ -3368,23 +3387,48 @@ function extractDescription(content) {
 }
 
 // ============================================
-// CLEAN CONTENT - WATERMARK REMOVAL ✅
+// CLEAN CONTENT - SUPER IMPROVED ✅
 // ============================================
 function cleanContent(content) {
   return (
     content
-      // Remove all IELTS ZONE variations
+      // ✅ STEP 1: Remove ALL tooltip/HTML artifacts
+      // Pattern: 'some text description">' before a word
+      .replace(/[a-z\s,\-]+["']\s*>\s*/gi, ' ')
+      
+      // ✅ STEP 2: Remove orphaned quotes and angle brackets
+      .replace(/["']\s*>/g, ' ')
+      .replace(/>\s*["']/g, ' ')
+      
+      // ✅ STEP 3: Decode HTML entities
+      .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&#039;/g, "'")
+      .replace(/&apos;/g, "'")
+      
+      // ✅ STEP 4: Remove IELTS ZONE artifacts
       .replace(/IELTS\s+ZONE\s*#?\s*\w+/gi, "")
-      .replace(/@\w+/g, "") // Remove @usernames
-      .replace(/\d{2,3}-\d{2,3}-\d{2,3}-\d{2,3}/g, "") // Remove phone numbers
+      .replace(/@\w+/g, "")
+      .replace(/\d{2,3}-\d{2,3}-\d{2,3}-\d{2,3}/g, "")
       .replace(/Death and Petrol/gi, "")
       .replace(/aimforthehighest/gi, "")
-
-      // Clean extra spaces and newlines
-      .replace(/\n{3,}/g, "\n\n")
-      .replace(/\s{2,}/g, " ")
+      
+      // ✅ STEP 5: Fix spacing and punctuation
+      .replace(/\s{2,}/g, ' ')           // Multiple spaces → single space
+      .replace(/\n{3,}/g, "\n\n")        // Multiple newlines → double newline
+      .replace(/([.!?])\s*([A-Z])/g, '$1 $2') // Ensure space after punctuation
+      
+      // ✅ STEP 6: Remove control characters
       .replace(/\r/g, "")
       .replace(/\f/g, "")
+      
+      // ✅ STEP 7: Final cleanup
+      .replace(/^\s+|\s+$/g, '') // Trim start and end
+      .replace(/\s+\./g, '.')    // Remove space before period
+      .replace(/\s+,/g, ',')     // Remove space before comma
+      
       .trim()
   );
 }
@@ -3819,6 +3863,30 @@ ${level === 'C1' ? `
       success: false,
       error: 'Failed to analyze summary: ' + error.message
     });
+  }
+});
+
+// ============================================
+// DEBUG ENDPOINT - ARTICLE CLEANING TEST ✅
+// ============================================
+app.get('/api/test-clean', async (req, res) => {
+  try {
+    const testContent = `The Power of Cultural typically held periodically, to celebrate or commemorate something">Festivals Cultural typically held periodically, to celebrate or commemorate something">festivals are some of the most joyful and colorful events in the world.`;
+    
+    const cleaned = cleanContent(testContent);
+    
+    res.json({
+      success: true,
+      original: testContent,
+      cleaned: cleaned,
+      comparison: {
+        originalLength: testContent.length,
+        cleanedLength: cleaned.length,
+        artifactsRemoved: testContent.length - cleaned.length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
