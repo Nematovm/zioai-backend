@@ -1098,7 +1098,7 @@ module.exports = {
 // WRITING CHECKER API - IELTS TASK 1/2
 // ============================================
 // ============================================
-// WRITING CHECKER API - IMPROVED BAND SCORING ✅
+// WRITING CHECKER API - STRICT REAL EXAMINER SCORING ✅
 // ============================================
 app.post("/api/check-writing", async (req, res) => {
   try {
@@ -1137,427 +1137,429 @@ app.post("/api/check-writing", async (req, res) => {
       hasChartImage: !!chartImage
     });
 
-    // ✅ IMPROVED PROMPTS WITH STRICT BAND SCORING
+    // ✅ STRICT REAL EXAMINER PROMPTS
     const prompts = {
-      uz: `Sen professional IELTS Writing examiner san va 10+ yillik tajribaga egasan. Quyidagi ${taskType} javobini juda ANIQ va OBJEKTIV baholab ber.
+      uz: `Sen Cambridge IELTS Writing examiner san, 15+ yillik tajribaga ega va juda QATTIQ baholaydigan mutaxassissan. Sening vazifang talabani HAQIQIY imtihon sharoitida baholash — ortiqcha yumshamas, lekin adolatli bo'l.
 
 📝 MAVZU/SAVOL:
 ${topic || '[Rasm orqali berilgan]'}
 
 ${topicImage ? '📊 MAVZU RASMI: Rasmda berilgan savol/mavzuni ko\'rib tahlil qil.\n' : ''}
-${taskType === 'Task 1' && chartImage ? '📈 GRAFIK/DIAGRAMMA: Talaba bu grafik/diagramma bo\'yicha yozgan. Rasmni diqqat bilan ko\'r va talaba haqiqatda rasmda ko\'rsatilgan ma\'lumotlarni to\'g\'ri tasvirlaganmi tekshir.\n' : ''}
+${taskType === 'Task 1' && chartImage ? '📈 GRAFIK/DIAGRAMMA: Talaba bu grafik bo\'yicha yozgan. Rasmni diqqat bilan ko\'r va talaba ma\'lumotlarni to\'g\'ri tasvirlaganmi tekshir.\n' : ''}
 
 🎤 TALABANING JAVOBI:
 ${text}
 
 📊 SO'ZLAR SONI: ${wordCount}
 
-⚠️ MUHIM BAND BAHOLASH QOIDALARI:
+═══════════════════════════════════════
+🎯 HAQIQIY IELTS BAND MEZONLARI (qat'iy)
+═══════════════════════════════════════
 
-**BAND 9.0:** 
-- NOLGA TENG grammatika xatolari
-- Murakkab lug'at TAKRORLANISHSIZ
-- Mukammal izchillik va tabiiy oqim
-- Turli tuzilmali murakkab gaplar
-- Barcha topshiriq talablari to'liq bajarilgan va ajoyib ishlab chiqilgan
+❗ MUHIM HAQIQATLAR:
+- Dunyodagi IELTS imtihonchilarining 90%+ dan ko'prog'i Band 7.0 dan PAST oladi
+- Band 8.0+ faqat JUDA kam talabalar oladi (top 5%)
+- Band 9.0 deyarli hech kim olmaydi
+- O'rtacha ingliz tili o'rganuvchi Band 5.5-6.0 darajasida bo'ladi
+- Yaxshi tayyorlangan talaba Band 6.5-7.0 oladi
 
-**BAND 8.0-8.5:**
-- Juda kam grammatika xatolari (maksimum 1-2 ta kichik xato)
-- Keng lug'at doirasi, kamdan-kam takrorlanish
-- Kuchli izchillik va ajoyib bog'lovchilar
-- Tez-tez murakkab gaplar
-- Barcha topshiriq talablari yaxshi bajarilgan
-${taskType === 'Task 1' ? '- Aniq ma\'lumotlar tavsifi va ajoyib taqqoslashlar' : '- Yaxshi ishlab chiqilgan dalillar va tegishli misollar'}
+📊 BAND STANDARTLARI:
 
-**BAND 7.0-7.5:**
-- Ba'zi grammatika xatolari (3-5 ta xato) lekin muloqotga xalaqit bermaydi
-- Yaxshi lug'at doirasi, vaqti-vaqti bilan takrorlanish
-- Umuman izchil, yaxshi bog'lovchilar
-- Oddiy va murakkab gaplar aralashmasi
-- Topshiriq talablari bajarilgan, lekin ko'proq ishlab chiqilishi mumkin edi
-${taskType === 'Task 1' ? '- Umuman aniq ma\'lumotlar, ba\'zi taqqoslashlar' : '- Aniq pozitsiya, ba\'zi ishlab chiqish'}
-
-**BAND 6.0-6.5:**
-- Sezilarli grammatika xatolari (6-10 ta xato)
-- Yetarli lug'at, takrorlanishlar bilan
-- Izchil, lekin oddiy bog'lovchilar
-- Asosan oddiy gaplar, kam murakkab
-- Topshiriq qisman bajarilgan
-${taskType === 'Task 1' ? '- Oddiy ma\'lumotlar tavsifi, cheklangan taqqoslashlar' : '- Pozitsiya ko\'rsatilgan, lekin cheklangan ishlab chiqish'}
-
-**BAND 5.0-5.5:**
-- Tez-tez grammatika xatolari (10+ xato)
+**BAND 5.0-5.5** — Ko'p xatolar, oddiy tuzilma:
+- 10+ grammatika xatolari
 - Cheklangan lug'at, ko'p takrorlanish
-- Oddiy yoki noaniq tashkilot
+- Mavzuni qisman tushunish
 - Asosan oddiy gaplar
-- Topshiriq yetarli darajada bajarilmagan
+- Bog'lovchilar juda kam yoki noto'g'ri ishlatilgan
+
+**BAND 6.0-6.5** — Qisman aniq, lekin zaif:
+- 6-10 sezilarli grammatika xatolari
+- Yetarli lug'at, lekin takrorlanishlar bor
+- Mavzuga javob bergan, lekin to'liq emas
+- Ba'zi murakkab gaplar bor, lekin xatolar bilan
+- Bog'lovchilar oddiy va takrorlanuvchi
+
+**BAND 7.0-7.5** — Yaxshi, lekin mukammal emas:
+- 3-5 ta grammatika xatolari (kichik xatolar ham hisoblanadi!)
+- Yaxshi lug'at doirasi, kamdan-kam takrorlanish
+- Mavzuga to'liq javob, ba'zi jihatlar kam rivojlangan
+- Murakkab va oddiy gaplar aralashmasi
+- Yaxshi bog'lovchilar, lekin ba'zan noto'g'ri
+
+**BAND 8.0-8.5** — Juda yuqori daraja (kamdan-kam):
+- Atigi 1-2 ta kichik xato (yoki 0)
+- Keng va murakkab lug'at, deyarli takrorlanmaydi
+- Mavzuni to'liq va ajoyib rivojlantirgan
+- Ko'pincha murakkab gaplar, mukammal tuzilma
+- Har xil bog'lovchilar tabiiy ishlatilgan
+
+**BAND 9.0** — Mukammal (deyarli hech kim olmaydi):
+- Mutlaqo 0 grammatika xatolari
+- Native speaker darajasidagi lug'at
+- Hamma narsa mukammal
+
+═══════════════════════════════════════
+⚠️ QATTIQ BAHOLASH QOIDALARI:
+═══════════════════════════════════════
+
+1. BITTA XATO HAM AHAMIYATLI — har bir grammatika xatosi ball ayiradi
+2. AGAR INSHO "yaxshi ko'rinsa" lekin 5-8 xato bo'lsa → 6.5-7.0, 8.0 EMAS
+3. Lug'at "yaxshi" bo'lsa ham takrorlanish bo'lsa → Lexical Resource 7.0 dan yuqori EMAS
+4. Mavzuni to'liq ko'rmagan bo'lsa → Task Achievement 6.0-6.5
+5. O'rtacha talaba 7.0+ OLMAYDI — bu faqat ajoyib insholar uchun
+6. BAND 8.0+ berish uchun BARCHA 4 mezon ajoyib bo'lishi kerak
+7. Agar biror mezon zaif bo'lsa → umumiy ball PASAYADI
 
 ${taskType === 'Task 1' && chartImage ? `
-**TASK 1 UCHUN MAXSUS TALABLAR:**
-1. GRAFIK ANIQLIGI: Talaba rasmda ko'rsatilgan aniq ma'lumotlarni to'g'ri yozganmi?
-2. MA'LUMOTLARNI TEKSHIRISH: Raqamlar, foizlar, joy nomlari to'g'rimi?
-3. ASOSIY XUSUSIYATLAR: Rasmda ko'rsatilgan muhim ma'lumotlar yozilganmi?
-4. TAQQOSLASHLAR: Taqqoslashlar qilinganmi?
-5. UMUMIY KO'RINISH: Umumiy trend/naqsh tasvirlanganmi?
+📊 TASK 1 MAXSUS TALABLAR:
+- Rasmda ko'rsatilgan ma'lumotlar to'g'ri yozilganmi? (xato raqamlar = past ball)
+- Overview paragraf bormi? (bo'lmasa → Task Achievement 5.0-5.5)
+- Taqqoslashlar qilinganmi?
+- Muhim trendlar tasvirlanganmi?
 ` : ''}
 
-⚠️ MUHIM: Agar insho haqiqatan ham Band 8+ darajasida bo'lsa (0-2 xato, murakkab lug'at, mukammal izchillik), BALDAN KAMAYTRIMA!
+${taskType === 'Task 2' ? `
+📝 TASK 2 MAXSUS TALABLAR:
+- Aniq pozitsiya/fikr bildirganmi?
+- Har bir fikr misollar bilan rivojlantirilganmi?
+- Introduction, Body, Conclusion to'g'ri tuzilganmi?
+- Faqat bir tomonni yoki ikkalasini ko'rganmi (essay turiga qarab)?
+` : ''}
 
 JAVOBNI QUYIDAGI FORMATDA BER:
 
-**1. MAVZUGA MUVOFIQLIKNI TEKSHIRISH ✅:**
-Javob mavzuga mos keladimi? (Ha/Yo'q)
-${taskType === 'Task 1' && chartImage ? 'Rasmda ko\'rsatilgan ma\'lumotlar to\'g\'ri tasvirlanganmi? (Ha/Yo\'q)\n' : ''}
+**1. MAVZUGA MUVOFIQLIK:**
+Javob mavzuga mos keladimi? (Ha/Yo'q va qisqacha sabab)
+${taskType === 'Task 1' && chartImage ? 'Rasmda ko\'rsatilgan ma\'lumotlar to\'g\'ri tasvirlanganmi?\n' : ''}
 
 **2. UMUMIY BAND BALI:**
-Band X.X/9.0 (ANIQ BAL - agar insho haqiqatan ham yaxshi bo'lsa, 8.0+ ber)
+🏆 Band X.X/9.0
+
+(Esda tut: ko'pchilik 5.5-7.0 orasida bo'ladi. 7.5+ faqat haqiqatan ajoyib insholar uchun!)
 
 **3. BATAFSIL BALLAR:**
-✅ Task Achievement: X.X/9 (har bir mezoni alohida tekshir)
+✅ Task Achievement/Response: X.X/9
 📝 Coherence & Cohesion: X.X/9
 📚 Lexical Resource: X.X/9
 ✏️ Grammatical Range & Accuracy: X.X/9
 
-**4. BATAFSIL TAHLIL:**
+**4. LUG'AT TAHLILI:**
+🎯 Daraja: (A2/B1/B2/C1/C2)
+✅ Kuchli so'zlar: [5+ ta murakkab so'z]
+⚠️ Zaif/Takrorlanuvchi so'zlar: [ro'yxat]
+💡 O'rniga ishlatilishi kerak: [sinonimlar]
 
-📖 **LUG'AT SIFATI:**
-🎯 Daraja: (A1/A2/B1/B2/C1/C2)
-📚 Kuchli So'zlar: [5+ ta murakkab so'zlar]
-⚠️ Takrorlanuvchi: [takrorlangan so'zlar]
-💡 Sinonimlar Kerak: [kerakli sinonimlar]
-🔥 Ilg'or Kollokatsiyalar: [agar band 8+ bo'lsa, qanday kollokatsiyalar ishlatilgan]
+**5. GRAMMATIKA XATOLARI (barchasi):**
+❌ Jami: X ta xato
 
-**5. GRAMMATIKA TAHLILI:**
-❌ Jami Xatolar: X ta (ANIQ SON)
-📊 Xato Turlari: [xato turlari: artikl, zamon, kelishish va h.k.]
+[HAR BIR XATONI KO'RSAT — hech birini o'tkazib yuborma:]
+**#1:** "[noto'g'ri]" → "[to'g'ri]"
+📌 Sabab: [qoidani tushuntir]
 
-[Faqat MUHIM xatolarni ko'rsat - agar 0-2 xato bo'lsa, barchasini yoz:]
-**#1:** "noto'g'ri" → "to'g'ri" (Qoida: ...)
+**#2:** "[noto'g'ri]" → "[to'g'ri]"
+📌 Sabab: [qoidani tushuntir]
+
+(va hokazo — barcha xatolar)
 
 ${taskType === 'Task 1' ? `
-**6. TASK 1 TALABLARI:**
-- Umumiy ko'rinish mavjudmi? Ha/Yo'q ✓/✗
-- Asosiy xususiyatlar tasvirlanganni? Ha/Yo'q ✓/✗
-- Ma'lumotlar aniqligi (agar grafik bo'lsa)? Ha/Yo'q ✓/✗
-- Taqqoslashlar qilinganmi? Ha/Yo'q ✓/✗
-- Mos uzunlik (150+)? Ha/Yo'q ✓/✗
+**6. TASK 1 TALABLARINI TEKSHIRISH:**
+☐ Overview/Umumiy ko'rinish: ✓ bor / ✗ yo'q
+☐ Asosiy xususiyatlar: ✓ tasvirlangan / ✗ yo'q
+☐ Ma'lumotlar aniqligi: ✓ to'g'ri / ✗ xatolar bor
+☐ Taqqoslashlar: ✓ bor / ✗ yo'q
+☐ Yetarli uzunlik (150+ so'z): ✓ / ✗
 ` : `
-**6. TASK 2 TALABLARI:**
-- Aniq pozitsiya? Ha/Yo'q ✓/✗
-- Yaxshi ishlab chiqilgan dalillar? Ha/Yo'q ✓/✗
-- Tegishli misollar? Ha/Yo'q ✓/✗
-- Mantiqiy tuzilma? Ha/Yo'q ✓/✗
-- Mos uzunlik (250+)? Ha/Yo'q ✓/✗
+**6. TASK 2 TALABLARINI TEKSHIRISH:**
+☐ Aniq pozitsiya/thesis: ✓ bor / ✗ yo'q
+☐ Rivojlangan dalillar: ✓ yaxshi / ✗ zaif
+☐ Misollar: ✓ bor / ✗ yo'q
+☐ To'g'ri essay tuzilmasi: ✓ / ✗
+☐ Yetarli uzunlik (250+ so'z): ✓ / ✗
 `}
 
-**7. COHERENCE & COHESION:**
-- Ishlatilgan bog'lovchi vositalar: [ro'yxat]
-- Paragraflar tashkili: [baholash]
-- Mantiqiy oqim: [baholash]
+**7. COHERENCE & COHESION TAHLILI:**
+Ishlatilgan bog'lovchilar: [ro'yxat]
+Paragraf tuzilishi: [baholash]
+Mantiqiy oqim: [baholash — zaifliklarni ko'rsat]
 
-**8. YAXSHILASH UCHUN GRAMMATIK NAQSHLAR:**
-- Tavsiya etilgan tuzilmalar: [complex sentences, conditionals, passive, etc.]
-- Umumiy xatolar: [recommendations to reduce common mistakes]
+**8. NIMA UCHUN AYNAN SHU BAND? (MUHIM):**
+Task Achievement: [sabab — aniq va qattiq]
+Coherence & Cohesion: [sabab]
+Lexical Resource: [sabab]
+Grammatical Range: [sabab]
 
-**9. NEGA BU BAND? (ASOSLASH):**
-[Nega aynan shu band balini berganingni tushuntir - bu juda muhim!]
-- Grammatika: [sabab]
-- Lug'at: [sabab]
-- Izchillik: [sabab]
-- Topshiriqni Bajarish: [sabab]
+❗ Umumiy xulosa: [Bu insho nima uchun yuqori/past ball oldi — real imtihon examiner uslubida yoz]
 
-**10. KEYINGI BANDGA YETISH:**
-[Hozirgi band ballidan +1.0 yuqori bandga yetish uchun aniq ko'rsatmalar. Masalan agar 7.0 bergan bo'lsang, "BAND 7.0 → 8.0" deb yoz]
-- Tuzatish: [nimani tuzatish kerak]
-- Qo'shish: [nimani qo'shish kerak]
-- Yaxshilash: [nimani yaxshilash kerak]
+**9. KEYINGI BANDGA O'TISH:**
+🎯 Hozirgi: Band X.X → Maqsad: Band X.X+0.5
 
-**11. YAKUNIY VERDICT:**
-${wordCount < 250 && taskType === 'Task 2' ? '⚠️ So\'zlar soni juda kam - maksimal band 6.5' : ''}
-[Umumiy xulosa - insho band 8+ ga loyiqmi yoki yo'qmi, aniq sabab bilan]
+Buni qilish shart:
+- ✏️ Tuzatish: [aniq nimani tuzatish kerak]
+- ➕ Qo'shish: [nimani qo'shish kerak]
+- 🔄 Almashtirish: [qaysi so'z/tuzilmalarni yangilashtirish kerak]
 
-⚠️ JAVOBNI FAQAT O'ZBEK TILIDA BER! 🇺🇿
-⚠️ Band balini ADOLATLI qo'y - agar insho haqiqatan ham yaxshi bo'lsa, 8.0+ ber!`,
+**10. YAKUNIY XULOSA:**
+${wordCount < 250 && taskType === 'Task 2' ? '⚠️ DIQQAT: So\'zlar soni juda kam! Task 2 da 250+ so\'z bo\'lishi SHART. Bu band ballini avtomatik ravishda pasaytiradi.\n' : ''}
+${wordCount < 150 && taskType === 'Task 1' ? '⚠️ DIQQAT: So\'zlar soni juda kam! Task 1 da 150+ so\'z bo\'lishi SHART.\n' : ''}
+[Real examiner sifatida yakuniy fikring — qisqa, aniq, adolatli]
 
-      ru: `Ты профессиональный IELTS Writing examiner с опытом 10+ лет. Оцени следующий ${taskType} ответ ТОЧНО и ОБЪЕКТИВНО.
+⚠️ JAVOBNI FAQAT O'ZBEK TILIDA BER! 🇺🇿`,
+
+      ru: `Ты строгий Cambridge IELTS Writing examiner с опытом 15+ лет. Твоя задача — оценить работу студента так, как это делают на РЕАЛЬНОМ экзамене IELTS — без завышения, но справедливо.
 
 📝 ТЕМА/ВОПРОС:
 ${topic || '[Дано через изображение]'}
 
-${topicImage ? '📊 ИЗОБРАЖЕНИЕ ТЕМЫ: Проанализируй вопрос/тему, данную на картинке.\n' : ''}
-${taskType === 'Task 1' && chartImage ? '📈 ГРАФИК/ДИАГРАММА: Студент писал по этому графику/диаграмме. Внимательно посмотри на картинку и проверь, правильно ли студент описал данные, показанные на изображении.\n' : ''}
+${topicImage ? '📊 ИЗОБРАЖЕНИЕ ТЕМЫ: Проанализируй вопрос, данный на картинке.\n' : ''}
+${taskType === 'Task 1' && chartImage ? '📈 ГРАФИК/ДИАГРАММА: Студент писал по этому графику. Внимательно посмотри и проверь точность описания.\n' : ''}
 
 🎤 ОТВЕТ СТУДЕНТА:
 ${text}
 
 📊 КОЛИЧЕСТВО СЛОВ: ${wordCount}
 
-⚠️ КРИТИЧЕСКИЕ ПРАВИЛА ОЦЕНКИ ПО BAND:
+═══════════════════════════════════════
+🎯 РЕАЛЬНЫЕ СТАНДАРТЫ IELTS BAND (строго)
+═══════════════════════════════════════
 
-**BAND 9.0:** 
-- НОЛЬ грамматических ошибок
-- Сложная лексика БЕЗ повторений
-- Идеальная связность и естественный поток
-- Сложные предложения с разнообразными структурами
-- Все требования задания полностью выполнены с отличной проработкой
+❗ ВАЖНЫЕ ФАКТЫ:
+- 90%+ кандидатов на реальном экзамене получают НИЖЕ Band 7.0
+- Band 8.0+ получают только top 5% кандидатов
+- Band 9.0 практически никто не получает
+- Средний изучающий английский получает Band 5.5-6.0
+- Хорошо подготовленный студент получает Band 6.5-7.0
 
-**BAND 8.0-8.5:**
-- Очень мало грамматических ошибок (максимум 1-2 незначительные ошибки)
-- Широкий диапазон лексики с редкими повторениями
-- Сильная связность с отличными linking words
-- Частые сложные предложения
-- Все требования задания хорошо выполнены
-${taskType === 'Task 1' ? '- Точное описание данных с отличными сравнениями' : '- Хорошо развитые аргументы с релевантными примерами'}
+📊 СТАНДАРТЫ BAND:
 
-**BAND 7.0-7.5:**
-- Некоторые грамматические ошибки (3-5 ошибок), но не мешают коммуникации
-- Хороший диапазон лексики с редкими повторениями
-- В целом связно с хорошими linking words
-- Смесь простых и сложных предложений
-- Требования задания выполнены, но могли быть лучше проработаны
-${taskType === 'Task 1' ? '- В целом точные данные с некоторыми сравнениями' : '- Четкая позиция с некоторой проработкой'}
+**BAND 5.0-5.5** — Много ошибок, слабая структура
+**BAND 6.0-6.5** — Частично понятно, но слабое развитие идей
+**BAND 7.0-7.5** — Хорошо, но не идеально (3-5 ошибок)
+**BAND 8.0-8.5** — Очень высокий уровень (редкость, 0-2 ошибки)
+**BAND 9.0** — Практически недостижимо
 
-**BAND 6.0-6.5:**
-- Заметные грамматические ошибки (6-10 ошибок)
-- Адекватная лексика с повторениями
-- Связно, но базовые linking words
-- В основном простые предложения, мало сложных
-- Задание выполнено частично
-${taskType === 'Task 1' ? '- Базовое описание данных, ограниченные сравнения' : '- Позиция заявлена, но ограниченная проработка'}
-
-**BAND 5.0-5.5:**
-- Частые грамматические ошибки (10+ ошибок)
-- Ограниченная лексика с большим количеством повторений
-- Базовая или неясная организация
-- В основном простые предложения
-- Задание выполнено неадекватно
+⚠️ СТРОГИЕ ПРАВИЛА ОЦЕНКИ:
+1. КАЖДАЯ ошибка влияет на балл
+2. Если "выглядит хорошо" но 5-8 ошибок → 6.5-7.0, НЕ 8.0
+3. Если лексика повторяется → Lexical Resource не выше 7.0
+4. Средний студент НЕ получает 7.0+ — это только для отличных работ
+5. Для Band 8.0+ ВСЕ 4 критерия должны быть отличными
 
 ${taskType === 'Task 1' && chartImage ? `
-**СПЕЦИФИЧЕСКИЕ ТРЕБОВАНИЯ ДЛЯ TASK 1:**
-1. ТОЧНОСТЬ ГРАФИКА: Правильно ли студент описал точные данные, показанные на картинке?
-2. ПРОВЕРКА ДАННЫХ: Правильны ли цифры, проценты, названия мест?
-3. КЛЮЧЕВЫЕ ОСОБЕННОСТИ: Описаны ли важные данные, показанные на картинке?
-4. СРАВНЕНИЯ: Сделаны ли сравнения?
-5. ОБЗОР: Описан ли общий тренд/паттерн?
+📊 ТРЕБОВАНИЯ TASK 1:
+- Правильно ли описаны данные из графика? (неверные цифры = низкий балл)
+- Есть ли параграф Overview? (нет → Task Achievement 5.0-5.5)
+- Сделаны ли сравнения?
+- Описаны ли ключевые тренды?
 ` : ''}
-
-⚠️ ВАЖНО: Если эссе действительно на уровне Band 8+ (0-2 ошибки, сложная лексика, идеальная связность), НЕ ЗАНИЖАЙ БАЛЛ!
 
 ДАЙ ОТВЕТ В СЛЕДУЮЩЕМ ФОРМАТЕ:
 
-**1. ПРОВЕРКА СООТВЕТСТВИЯ ТЕМЕ ✅:**
-Соответствует ли ответ теме? (Да/Нет)
-${taskType === 'Task 1' && chartImage ? 'Правильно ли описаны данные, показанные на картинке? (Да/Нет)\n' : ''}
+**1. СООТВЕТСТВИЕ ТЕМЕ:**
+Соответствует ли ответ теме? (Да/Нет + краткая причина)
 
 **2. ОБЩИЙ БАЛЛ BAND:**
-Band X.X/9.0 (ТОЧНЫЙ БАЛЛ - если эссе действительно хорошее, ставь 8.0+)
+🏆 Band X.X/9.0
+(Помни: большинство получают 5.5-7.0. Band 7.5+ только для действительно отличных работ!)
 
 **3. ДЕТАЛЬНЫЕ БАЛЛЫ:**
-✅ Task Achievement: X.X/9 (проверяй каждый критерий отдельно)
+✅ Task Achievement/Response: X.X/9
 📝 Coherence & Cohesion: X.X/9
 📚 Lexical Resource: X.X/9
 ✏️ Grammatical Range & Accuracy: X.X/9
 
-**4. ДЕТАЛЬНЫЙ АНАЛИЗ:**
+**4. АНАЛИЗ ЛЕКСИКИ:**
+🎯 Уровень: (A2/B1/B2/C1/C2)
+✅ Сильные слова: [список]
+⚠️ Слабые/Повторяющиеся: [список]
+💡 Рекомендуемые синонимы: [список]
 
-📖 **КАЧЕСТВО ЛЕКСИКИ:**
-🎯 Уровень: (A1/A2/B1/B2/C1/C2)
-📚 Сильные слова: [5+ сложных слов]
-⚠️ Повторяющиеся: [повторяющиеся слова]
-💡 Нужны синонимы: [необходимые синонимы]
-🔥 Продвинутые коллокации: [если band 8+, какие коллокации использованы]
+**5. ГРАММАТИЧЕСКИЕ ОШИБКИ (все до одной):**
+❌ Всего: X ошибок
 
-**5. ГРАММАТИЧЕСКИЙ АНАЛИЗ:**
-❌ Всего ошибок: X штук (ТОЧНОЕ КОЛИЧЕСТВО)
-📊 Типы ошибок: [типы ошибок: артикли, времена, согласование и т.д.]
+[ПОКАЗЫВАЙ КАЖДУЮ ОШИБКУ:]
+**#1:** "[неправильно]" → "[правильно]"
+📌 Правило: [объяснение]
 
-[Показывай только ВАЖНЫЕ ошибки - если 0-2 ошибки, пиши все:]
-**#1:** "неправильно" → "правильно" (Правило: ...)
+(и так далее — все ошибки)
 
 ${taskType === 'Task 1' ? `
-**6. ТРЕБОВАНИЯ TASK 1:**
-- Overview присутствует? Да/Нет ✓/✗
-- Ключевые особенности описаны? Да/Нет ✓/✗
-- Точность данных (если график)? Да/Нет ✓/✗
-- Сделаны сравнения? Да/Нет ✓/✗
-- Подходящая длина (150+)? Да/Нет ✓/✗
+**6. ПРОВЕРКА TASK 1:**
+☐ Overview присутствует: ✓/✗
+☐ Ключевые особенности: ✓/✗
+☐ Точность данных: ✓/✗
+☐ Сравнения: ✓/✗
+☐ Длина 150+ слов: ✓/✗
 ` : `
-**6. ТРЕБОВАНИЯ TASK 2:**
-- Четкая позиция? Да/Нет ✓/✗
-- Хорошо развитые аргументы? Да/Нет ✓/✗
-- Релевантные примеры? Да/Нет ✓/✗
-- Логическая структура? Да/Нет ✓/✗
-- Подходящая длина (250+)? Да/Нет ✓/✗
+**6. ПРОВЕРКА TASK 2:**
+☐ Четкая позиция/тезис: ✓/✗
+☐ Развитые аргументы: ✓/✗
+☐ Примеры: ✓/✗
+☐ Структура эссе: ✓/✗
+☐ Длина 250+ слов: ✓/✗
 `}
 
 **7. COHERENCE & COHESION:**
-- Использованные linking devices: [список]
-- Организация параграфов: [оценка]
-- Логический поток: [оценка]
+Использованные linking devices: [список]
+Организация параграфов: [оценка]
+Логический поток: [оценка — укажи слабые места]
 
-**8. ГРАММАТИЧЕСКИЕ ПАТТЕРНЫ ДЛЯ УЛУЧШЕНИЯ:**
-- Предлагаемые структуры: [complex sentences, conditionals, passive, etc.]
-- Частые ошибки: [recommendations to reduce errors]
+**8. ПОЧЕМУ ЭТОТ BAND? (ОБЯЗАТЕЛЬНО):**
+Task Achievement: [строгое обоснование]
+Coherence & Cohesion: [обоснование]
+Lexical Resource: [обоснование]
+Grammatical Range: [обоснование]
 
-**9. ПОЧЕМУ ЭТОТ BAND? (ОБОСНОВАНИЕ):**
-[Объясни, почему поставил именно этот балл - это очень важно!]
-- Грамматика: [причина]
-- Лексика: [причина]
-- Связность: [причина]
-- Task Response: [причина]
+❗ Итог: [Почему эссе получило этот балл — в стиле реального экзаменатора]
 
-**10. ДЛЯ ДОСТИЖЕНИЯ СЛЕДУЮЩЕГО BAND:**
-[Точные инструкции для достижения band на +1.0 выше текущего. Например, если поставил 7.0, напиши "BAND 7.0 → 8.0"]
-- Исправить: [что нужно исправить]
-- Добавить: [что нужно добавить]
-- Улучшить: [что нужно улучшить]
+**9. ДЛЯ СЛЕДУЮЩЕГО BAND:**
+🎯 Сейчас: Band X.X → Цель: Band X.X+0.5
 
-**11. ИТОГОВЫЙ ВЕРДИКТ:**
-${wordCount < 250 && taskType === 'Task 2' ? '⚠️ Количество слов слишком мало - максимальный band 6.5' : ''}
-[Общий вывод - заслуживает ли эссе band 8+ или нет, с четкой причиной]
+Обязательно сделать:
+- ✏️ Исправить: [конкретно что]
+- ➕ Добавить: [что добавить]
+- 🔄 Заменить: [что улучшить в словах/структурах]
 
-⚠️ ДАЙ ОТВЕТ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! 🇷🇺
-⚠️ Ставь балл СПРАВЕДЛИВО - если эссе действительно хорошее, ставь 8.0+!`,
+**10. ИТОГОВЫЙ ВЕРДИКТ:**
+${wordCount < 250 && taskType === 'Task 2' ? '⚠️ ВНИМАНИЕ: Слов слишком мало! В Task 2 обязательно 250+ слов. Это автоматически снижает балл.\n' : ''}
+[Финальная оценка в стиле строгого, но справедливого экзаменатора]
 
-      en: `You are a professional IELTS Writing examiner with 10+ years experience. Evaluate this ${taskType} response ACCURATELY and OBJECTIVELY.
+⚠️ ДАЙ ОТВЕТ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ! 🇷🇺`,
+
+      en: `You are a strict Cambridge IELTS Writing examiner with 15+ years of experience. Your job is to assess this response exactly as it would be scored on the REAL IELTS exam — no grade inflation, but fair and professional.
 
 📝 TOPIC/QUESTION:
 ${topic || '[Given through image]'}
 
-${topicImage ? '📊 TOPIC IMAGE: Analyze the question/topic given in the picture.\n' : ''}
-${taskType === 'Task 1' && chartImage ? '📈 CHART/DIAGRAM: The student wrote about this chart/diagram. Look carefully at the picture and check if the student correctly described the data shown in the image.\n' : ''}
+${topicImage ? '📊 TOPIC IMAGE: Analyze the question/topic shown in the image.\n' : ''}
+${taskType === 'Task 1' && chartImage ? '📈 CHART/DIAGRAM: The student wrote about this chart. Look carefully and check if data is accurately described.\n' : ''}
 
-🎤 STUDENT'S ANSWER:
+🎤 STUDENT\'S ANSWER:
 ${text}
 
 📊 WORD COUNT: ${wordCount}
 
-⚠️ CRITICAL BAND SCORING RULES:
+═══════════════════════════════════════
+🎯 REAL IELTS BAND STANDARDS (strict)
+═══════════════════════════════════════
 
-**BAND 9.0:** 
-- ZERO grammar errors
-- Sophisticated vocabulary with NO repetition
-- Perfect coherence and natural flow
-- Complex sentences with varied structures
-- All task requirements fully addressed with excellent development
+❗ CRITICAL FACTS ABOUT REAL IELTS SCORING:
+- 90%+ of real IELTS candidates score BELOW Band 7.0
+- Band 8.0+ is achieved by only the top 5% of candidates
+- Band 9.0 is virtually never awarded
+- An average learner scores Band 5.5-6.0
+- A well-prepared student scores Band 6.5-7.0
 
-**BAND 8.0-8.5:**
-- Very few grammar errors (1-2 minor mistakes maximum)
-- Wide range of vocabulary with rare repetition
-- Strong coherence with excellent linking
-- Frequent complex sentences
-- All task requirements well addressed
-${taskType === 'Task 1' ? '- Accurate data description with excellent comparisons' : '- Well-developed arguments with relevant examples'}
+📊 BAND STANDARDS:
 
-**BAND 7.0-7.5:**
-- Some grammar errors (3-5 mistakes) but don't impede communication
-- Good vocabulary range with occasional repetition
-- Generally coherent with good linking
-- Mix of simple and complex sentences
-- Task requirements addressed but could be more developed
-${taskType === 'Task 1' ? '- Generally accurate data with some comparisons' : '- Clear position with some development'}
+**BAND 5.0-5.5** — Frequent errors, basic structure, limited vocabulary
+**BAND 6.0-6.5** — Partially effective, noticeable errors (6-10), adequate but repetitive vocab
+**BAND 7.0-7.5** — Good but not perfect: 3-5 errors, good range, some complex sentences
+**BAND 8.0-8.5** — Rare high achievement: 0-2 errors, wide range, near-perfect execution
+**BAND 9.0** — Virtually impossible: zero errors, native-like fluency
 
-**BAND 6.0-6.5:**
-- Noticeable grammar errors (6-10 mistakes)
-- Adequate vocabulary with repetition
-- Coherent but basic linking
-- Mostly simple sentences, few complex
-- Task partially addressed
-${taskType === 'Task 1' ? '- Basic data description, limited comparisons' : '- Position stated but limited development'}
-
-**BAND 5.0-5.5:**
-- Frequent grammar errors (10+ mistakes)
-- Limited vocabulary with much repetition
-- Basic or unclear organization
-- Mostly simple sentences
-- Task inadequately addressed
+⚠️ STRICT SCORING RULES — APPLY THESE WITHOUT EXCEPTION:
+1. EVERY grammar error matters and reduces the score
+2. If essay "looks good" but has 5-8 errors → 6.5-7.0, NOT 8.0
+3. If vocabulary is repetitive → Lexical Resource capped at 7.0
+4. Average students do NOT get 7.0+ — that's reserved for excellent work
+5. Band 8.0+ requires ALL 4 criteria to be excellent
+6. One weak criterion drags down the overall band
+7. Do NOT round up — if it's between bands, give the LOWER one unless clearly justified
 
 ${taskType === 'Task 1' && chartImage ? `
-**TASK 1 SPECIFIC REQUIREMENTS:**
-1. CHART ACCURACY: Did the student correctly write the exact data shown in the picture?
-2. DATA VERIFICATION: Are the numbers, percentages, place names correct?
-3. KEY FEATURES: Are the important data shown in the picture written?
-4. COMPARISONS: Are comparisons made?
-5. OVERVIEW: Is the overall trend/pattern described?
+📊 TASK 1 SPECIFICS:
+- Are the chart figures/data accurately described? (wrong numbers = significant penalty)
+- Is there an Overview paragraph? (missing → Task Achievement capped at 5.5)
+- Are meaningful comparisons made?
+- Are key trends identified?
 ` : ''}
 
-⚠️ IMPORTANT: If the essay is truly at Band 8+ level (0-2 errors, complex vocabulary, perfect coherence), DON'T REDUCE THE SCORE!
+${taskType === 'Task 2' ? `
+📝 TASK 2 SPECIFICS:
+- Is there a clear thesis/position stated?
+- Are arguments developed with specific examples?
+- Is the essay type correctly handled (opinion/discussion/problem-solution)?
+- Is the conclusion effective (no new ideas)?
+` : ''}
 
-GIVE YOUR ANSWER IN THE FOLLOWING FORMAT:
+GIVE YOUR ASSESSMENT IN THIS FORMAT:
 
-**1. TOPIC RELEVANCE CHECK ✅:**
-Does the answer match the topic? (Yes/No)
-${taskType === 'Task 1' && chartImage ? 'Are the data shown in the picture correctly described? (Yes/No)\n' : ''}
+**1. TOPIC RELEVANCE:**
+Does the response address the topic? (Yes/No + brief reason)
+${taskType === 'Task 1' && chartImage ? 'Is the chart data accurately described? (Yes/No + what was wrong/right)\n' : ''}
 
 **2. OVERALL BAND SCORE:**
-Band X.X/9.0 (EXACT SCORE - if the essay is truly good, give 8.0+)
+🏆 Band X.X/9.0
 
-**3. DETAILED SCORES:**
-✅ Task Achievement: X.X/9 (check each criterion separately)
+(Remember: most candidates score 5.5-7.0. Band 7.5+ only for genuinely strong work. Be strict.)
+
+**3. CRITERION SCORES:**
+✅ Task Achievement/Response: X.X/9
 📝 Coherence & Cohesion: X.X/9
 📚 Lexical Resource: X.X/9
 ✏️ Grammatical Range & Accuracy: X.X/9
 
-**4. DETAILED ANALYSIS:**
+**4. VOCABULARY ANALYSIS:**
+🎯 Level: (A2/B1/B2/C1/C2)
+✅ Strong words used: [list 5+]
+⚠️ Weak/Repeated words: [list]
+💡 Should have used instead: [better alternatives]
 
-📖 **VOCABULARY QUALITY:**
-🎯 Level: (A1/A2/B1/B2/C1/C2)
-📚 Strong Words: [5+ sophisticated words]
-⚠️ Repetitive: [repeated words]
-💡 Synonyms Needed: [necessary synonyms]
-🔥 Advanced Collocations: [if band 8+, what collocations were used]
+**5. GRAMMAR ERRORS (list every single one):**
+❌ Total errors: X
 
-**5. GRAMMAR ANALYSIS:**
-❌ Total Errors: X (EXACT NUMBER)
-📊 Error Types: [error types: articles, tenses, agreement, etc.]
+[SHOW EVERY ERROR — miss nothing:]
+**#1:** "[wrong]" → "[correct]"
+📌 Rule: [explain the grammar rule]
 
-[Show only IMPORTANT errors - if 0-2 errors, write all:]
-**#1:** "incorrect" → "correct" (Rule: ...)
+**#2:** "[wrong]" → "[correct]"
+📌 Rule: [explain]
+
+(continue for ALL errors)
 
 ${taskType === 'Task 1' ? `
-**6. TASK 1 REQUIREMENTS:**
-- Overview present? Yes/No ✓/✗
-- Key features described? Yes/No ✓/✗
-- Data accuracy (if chart)? Yes/No ✓/✗
-- Comparisons made? Yes/No ✓/✗
-- Appropriate length (150+)? Yes/No ✓/✗
+**6. TASK 1 CHECKLIST:**
+☐ Overview paragraph present: ✓/✗
+☐ Key features described: ✓/✗
+☐ Data accuracy: ✓/✗
+☐ Comparisons made: ✓/✗
+☐ Minimum 150 words: ✓/✗
 ` : `
-**6. TASK 2 REQUIREMENTS:**
-- Clear position? Yes/No ✓/✗
-- Well-developed arguments? Yes/No ✓/✗
-- Relevant examples? Yes/No ✓/✗
-- Logical structure? Yes/No ✓/✗
-- Appropriate length (250+)? Yes/No ✓/✗
+**6. TASK 2 CHECKLIST:**
+☐ Clear position/thesis: ✓/✗
+☐ Well-developed arguments: ✓/✗
+☐ Relevant examples given: ✓/✗
+☐ Correct essay structure: ✓/✗
+☐ Minimum 250 words: ✓/✗
 `}
 
 **7. COHERENCE & COHESION:**
-- Linking devices used: [list]
-- Paragraph organization: [evaluation]
-- Logical flow: [evaluation]
+Linking devices used: [list]
+Paragraph organisation: [assessment]
+Logical flow: [assessment — point out weaknesses]
 
-**8. GRAMMAR PATTERNS TO IMPROVE:**
-- Suggested Structures: [complex sentences, conditionals, passive, etc.]
-- Common Mistakes: [recommendations to reduce errors]
+**8. WHY THIS BAND? (JUSTIFICATION — BE SPECIFIC):**
+Task Achievement: [strict justification]
+Coherence & Cohesion: [justification]
+Lexical Resource: [justification]
+Grammatical Range & Accuracy: [justification]
 
-**9. WHY THIS BAND? (JUSTIFICATION):**
-[Explain why you gave this band score - this is very important!]
-- Grammar: [reason]
-- Vocabulary: [reason]
-- Coherence: [reason]
-- Task Response: [reason]
+❗ Overall: [Why this essay earned this score — write as a real, strict examiner would]
 
-**10. TO REACH THE NEXT BAND:**
-[Exact instructions to reach +1.0 band higher than current. For example, if you gave 7.0, write "BAND 7.0 → 8.0"]
-- Fix: [what needs to be fixed]
-- Add: [what needs to be added]
-- Improve: [what needs to be improved]
+**9. TO REACH THE NEXT BAND:**
+🎯 Current: Band X.X → Target: Band X.X+0.5
 
-**11. FINAL VERDICT:**
-${wordCount < 250 && taskType === 'Task 2' ? '⚠️ Word count too low - maximum band 6.5' : ''}
-[Overall conclusion - does the essay deserve band 8+ or not, with clear reason]
+Must do:
+- ✏️ Fix: [specific corrections needed]
+- ➕ Add: [what's missing]
+- 🔄 Replace: [weaker vocabulary/structures to upgrade]
 
-⚠️ GIVE YOUR ANSWER ONLY IN ENGLISH! 🇬🇧🇺🇸
-⚠️ Give the band score FAIRLY - if the essay is truly good, give 8.0+!`
+**10. FINAL VERDICT:**
+${wordCount < 250 && taskType === 'Task 2' ? '⚠️ WARNING: Word count is too low! Task 2 requires 250+ words minimum. This automatically penalises the Task Response score.\n' : ''}
+${wordCount < 150 && taskType === 'Task 1' ? '⚠️ WARNING: Word count is too low! Task 1 requires 150+ words minimum.\n' : ''}
+[Final professional assessment in the tone of a strict but fair Cambridge examiner]
+
+⚠️ GIVE YOUR ANSWER ONLY IN ENGLISH! 🇬🇧🇺🇸`
     };
 
     const selectedPrompt = prompts[language] || prompts["uz"];
@@ -1599,7 +1601,7 @@ ${wordCount < 250 && taskType === 'Task 2' ? '⚠️ Word count too low - maximu
             ],
             generationConfig: { 
               maxOutputTokens: 8192,
-              temperature: 0.3 // ✅ Lower temperature for more consistent scoring
+              temperature: 0.2 // ✅ Even lower temperature for more consistent, strict scoring
             }
           })
         });
@@ -1739,7 +1741,6 @@ Write ONLY the essay now (no extra text, no title, no labels):`;
       console.log('🖼️ Generating model answer with images...');
       
       try {
-        // TRY GEMINI FIRST
         const imageParts = [];
         
         if (topicImage) {
@@ -1750,7 +1751,6 @@ Write ONLY the essay now (no extra text, no title, no labels):`;
           });
         }
         
-        // ✅ ONLY ADD CHART FOR TASK 1
         if (taskType === 'Task 1' && chartImage) {
           const base64Data = chartImage.split(",")[1];
           const mediaType = chartImage.split(";")[0].split(":")[1];
@@ -1789,12 +1789,10 @@ Write ONLY the essay now (no extra text, no title, no labels):`;
       } catch (geminiError) {
         console.error('⚠️ Gemini (images) failed:', geminiError.message);
         
-        // FALLBACK: OCR + DeepSeek/Groq
         console.log('🔄 [2/2] Falling back to OCR + Text AI...');
         
         let extractedText = '';
         
-        // ✅ ONLY USE OCR FOR TASK 1 WITH CHART
         if (taskType === 'Task 1' && chartImage) {
           try {
             const base64Data = chartImage.split(",")[1];
@@ -1841,9 +1839,6 @@ ${chartText}
    - notwithstanding, whereas, in contrast, considerably
    - demonstrate, indicate, reveal, illustrate
 
-7. EXAMPLE STRUCTURE:
-   "The chart illustrates temperature variations across four major cities—Tokyo, New York, Berlin, and London—over a twelve-month period. Overall, Tokyo and New York exhibited considerably higher temperatures during summer months, reaching approximately 28°C and 26°C respectively in August, whereas Berlin and London demonstrated more moderate patterns..."
-
 IMPORTANT: Your model answer MUST be 150-170 words minimum and use EXACT names from the chart!`;
             
           } catch (ocrError) {
@@ -1859,7 +1854,6 @@ Since chart data is unavailable:
           }
         }
         
-        // Topic image OCR
         if (topicImage) {
           try {
             const base64Data = topicImage.split(",")[1];
@@ -1876,11 +1870,9 @@ Since chart data is unavailable:
       }
       
     } else {
-      // ✅ Text only
       rawResponse = await callSmartAI(prompt, 2048);
     }
     
-    // Clean response
     let modelAnswer = rawResponse
       .replace(/```markdown/g, '')
       .replace(/```/g, '')
